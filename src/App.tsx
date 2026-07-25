@@ -21,7 +21,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/Social-media">
       <div className="min-h-screen bg-gray-50">
         {user && <Navbar />}
         <main className={user ? 'pb-8' : ''}>
