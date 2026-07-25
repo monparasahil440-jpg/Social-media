@@ -21,7 +21,8 @@ function App() {
   }
 
   return (
-      <HashRouter>      <div className="min-h-screen bg-gray-50">
+      <HashRouter>      
+        <div className="min-h-screen bg-gray-50">
         {user && <Navbar />}
         <main className={user ? 'pb-8' : ''}>
           <Routes>
