@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import Navbar from './components/Navbar'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -21,8 +21,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter basename="/Social-media">
-      <div className="min-h-screen bg-gray-50">
+      <HashRouter>      <div className="min-h-screen bg-gray-50">
         {user && <Navbar />}
         <main className={user ? 'pb-8' : ''}>
           <Routes>
@@ -35,7 +34,7 @@ function App() {
           </Routes>
         </main>
       </div>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 
