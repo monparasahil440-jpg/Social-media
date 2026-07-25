@@ -11,6 +11,7 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>
   sendOtp: (email: string) => Promise<void>
   verifyOtp: (email: string, token: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<any>
   signUp: (email: string, password: string, username?: string) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -78,6 +79,13 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     await sendOtpToEmail(email)
   }
 
+  // Sign in with email + password
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return data
+  }
+
   // Verify OTP code and sign in
   const verifyOtp = async (email: string, token: string) => {
     await verifyEmailOtp(email, token)
@@ -117,7 +125,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, profile, refreshProfile, sendOtp, verifyOtp, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, profile, refreshProfile, sendOtp, verifyOtp, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )
