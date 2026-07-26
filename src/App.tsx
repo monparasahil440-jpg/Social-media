@@ -8,6 +8,7 @@ import SignUp from './pages/SignUp'
 import Profile from './pages/Profile'
 import Explore from './pages/Explore'
 import PostDetail from './pages/PostDetail'
+import Chat from './pages/Chat'
 
 function App() {
   const { user, loading } = useAuth()
@@ -32,6 +33,8 @@ function App() {
             <Route path="/profile/:userId" element={user ? <Profile /> : <Navigate to="/login" replace />} />
             <Route path="/explore" element={user ? <Explore /> : <Navigate to="/login" replace />} />
             <Route path="/post/:postId" element={user ? <PostDetail /> : <Navigate to="/login" replace />} />
+            <Route path="/chat" element={user ? <Chat /> : <Navigate to="/login" replace />} />
+            <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" replace />} />
           </Routes>
         </main>
       </div>

@@ -126,7 +126,7 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
               </div>
             )}
           </div>
-        </div>
+          </div>
       </div>
 
       {/* Post Content */}
@@ -134,9 +134,9 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
         <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{post.content}</p>
 
         {post.image_url && !imageError && (
-          <div className="mt-3 rounded-xl overflow-hidden bg-gray-50">
+          <div className="mt-3 rounded-xl overflow-hidden bg-gray-50 relative">
             {!imageLoaded && (
-              <div className="w-full h-64 bg-gray-100 animate-pulse flex items-center justify-center">
+              <div className="w-full h-64 bg-gray-100 animate-pulse flex items-center justify-center absolute inset-0 z-10">
                 <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -145,10 +145,15 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
             <img
               src={post.image_url}
               alt="Post image"
-              className={`w-full object-cover max-h-96 ${imageLoaded ? 'block' : 'hidden'}`}
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-              loading="lazy"
+              className={`w-full object-cover max-h-96 ${imageLoaded ? 'block' : 'opacity-0'}`}
+              onLoad={() => {
+                setImageLoaded(true)
+                setImageError(false)
+              }}
+              onError={() => {
+                setImageError(true)
+                setImageLoaded(true)
+              }}
             />
           </div>
         )}
@@ -231,4 +236,3 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
 }
 
 export default PostCard
-

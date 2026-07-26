@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { getUnreadConversationCount } from '../lib/supabaseClient'
 import NotificationBell from './NotificationBell'
 import Avatar from './Avatar'
 
@@ -9,6 +10,22 @@ const Navbar = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [unreadMessages, setUnreadMessages] = useState(0)
+
+  useEffect(() => {
+    if (user) {
+      loadUnreadCount()
+    }
+  }, [user])
+
+  const loadUnreadCount = async () => {
+    try {
+      const count = await getUnreadConversationCount()
+      setUnreadMessages(count)
+    } catch {
+      // Gracefully handle
+    }
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -18,10 +35,14 @@ const Navbar = () => {
   const navLinks = [
     { path: '/', label: 'Home', icon: '🏠' },
     { path: '/explore', label: 'Explore', icon: '🔍' },
+    { path: '/chat', label: 'Messages', icon: '💬', badge: unreadMessages },
     { path: `/profile/${user?.id}`, label: 'Profile', icon: '👤' },
   ]
 
-  const isActive = (path: string) => location.pathname === path
+  const isActive = (path: string) => {
+    if (path === '/chat') return location.pathname.startsWith('/chat')
+    return location.pathname === path
+  }
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">

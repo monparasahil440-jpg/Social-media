@@ -79,3 +79,55 @@ export interface Block {
   created_at: string
 }
 
+// ============== CHAT & CALL TYPES ==============
+
+export interface Conversation {
+  id: string
+  created_at: string
+  updated_at: string
+  last_message_at: string
+  // Joined fields
+  participants?: ConversationParticipant[]
+  last_message?: Message
+  other_participant?: Profile
+  unread_count?: number
+}
+
+export interface ConversationParticipant {
+  id: string
+  conversation_id: string
+  user_id: string
+  joined_at: string
+  last_read_at: string
+  // Joined fields
+  profile?: Profile
+}
+
+export type MessageType = 'text' | 'image' | 'call'
+
+export interface Message {
+  id: string
+  conversation_id: string
+  sender_id: string
+  content: string
+  image_url: string | null
+  message_type: MessageType
+  call_type: 'audio' | 'video' | null
+  call_duration: number | null
+  created_at: string
+  // Joined fields
+  sender?: Profile
+}
+
+export interface CallSignal {
+  id: string
+  conversation_id: string
+  sender_id: string
+  receiver_id: string
+  signal_data: any
+  signal_type: 'offer' | 'answer' | 'ice-candidate'
+  created_at: string
+  // Joined fields
+  sender?: Profile
+}
+

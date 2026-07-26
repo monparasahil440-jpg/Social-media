@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Profile, Post, Comment, Notification, FollowRequest, Block } from '../types'
+import type { Profile, Post, Comment, Notification, FollowRequest, Block, Conversation, ConversationParticipant, Message, CallSignal } from '../types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -428,42 +428,6 @@ export const getFollowingCount = async (userId: string) => {
 
   if (error) throw error
   return count || 0
-}
-
-// ============== OTP AUTH HELPERS ==============
-
-/**
- * Sends a one-time password (OTP) to the user's email for login.
- */
-export const sendOtpToEmail = async (email: string) => {
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      shouldCreateUser: false, // Only sign in existing users
-    },
-  })
-  if (error) throw error
-  return data
-}
-
-/**
- * Verifies an OTP code sent to the user's email.
- * On success, the user session is automatically set by Supabase.
- */
-export const verifyEmailOtp = async (email: string, token: string) => {
-  const { data, error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'email',
-  })
-  if (error) throw error
-
-  // Ensure the user has a profile (auto-create if missing)
-  if (data.user) {
-    await ensureProfile()
-  }
-
-  return data
 }
 
 // ============== FOLLOW LISTS HELPERS ==============
@@ -934,5 +898,425 @@ export const subscribeToLikes = (postId: string, callback: (payload: any) => voi
     .subscribe()
 }
 
+// ============== CHAT HELPERS ==============
 
+/**
+ * Create a new conversation or get existing one between two users.
+ * For 1-on-1 chat, this ensures only one conversation exists per pair.
+ */
+export const createOrGetConversation = async (otherUserId: string): Promise<Conversation> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
 
+  try {
+    // Check if a 1-on-1 conversation already exists between these two users
+    const { data: existingConversations, error: searchError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', currentUser.id)
+
+    if (searchError) throw searchError
+
+    if (existingConversations && existingConversations.length > 0) {
+      const conversationIds = existingConversations.map(c => c.conversation_id)
+
+      // Check if any of these conversations also include the other user
+      const { data: mutual, error: mutualError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', otherUserId)
+        .in('conversation_id', conversationIds)
+
+      if (mutualError) throw mutualError
+
+      if (mutual && mutual.length > 0) {
+        // Existing conversation found
+        const { data: conv, error: convError } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('id', mutual[0].conversation_id)
+          .single()
+
+        if (convError) throw convError
+        return conv as Conversation
+      }
+    }
+
+    // Create new conversation
+    const { data: newConversation, error: createError } = await supabase
+      .from('conversations')
+      .insert({})
+      .select('*')
+      .single()
+
+    if (createError) throw createError
+
+    // Add both participants
+    const participants = [
+      { conversation_id: newConversation.id, user_id: currentUser.id },
+      { conversation_id: newConversation.id, user_id: otherUserId },
+    ]
+
+    const { error: participantError } = await supabase
+      .from('conversation_participants')
+      .insert(participants)
+
+    if (participantError) throw participantError
+
+    return newConversation as Conversation
+  } catch (err: any) {
+    // Gracefully handle missing tables (migration not run yet)
+    if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
+      console.warn('Chat tables not available yet. Run the migration first.')
+      throw new Error('Chat tables not set up. Please run the database migration.')
+    }
+    throw err
+  }
+}
+
+/**
+ * Get all conversations for the current user with the last message and other participant profile.
+ */
+export const getUserConversations = async (): Promise<Conversation[]> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  // Get conversations the user is part of
+  const { data: participations, error: partError } = await supabase
+    .from('conversation_participants')
+    .select('conversation_id')
+    .eq('user_id', currentUser.id)
+
+  if (partError) throw partError
+  if (!participations || participations.length === 0) return []
+
+  const conversationIds = participations.map(p => p.conversation_id)
+
+  // Get conversations ordered by last_message_at
+  const { data: conversations, error: convError } = await supabase
+    .from('conversations')
+    .select('*')
+    .in('id', conversationIds)
+    .order('last_message_at', { ascending: false })
+
+  if (convError) throw convError
+  if (!conversations) return []
+
+  // For each conversation, get participants and last message
+  const conversationsWithDetails: Conversation[] = await Promise.all(
+    conversations.map(async (conv: any) => {
+      // Get other participant
+      const { data: participants } = await supabase
+        .from('conversation_participants')
+        .select('user_id, last_read_at')
+        .eq('conversation_id', conv.id)
+
+      const otherParticipantId = participants?.find((p: any) => p.user_id !== currentUser.id)?.user_id
+      const myParticipation = participants?.find((p: any) => p.user_id === currentUser.id)
+
+      // Get other user's profile
+      let otherProfile: Profile | null = null
+      if (otherParticipantId) {
+        otherProfile = await getProfile(otherParticipantId)
+      }
+
+      // Get last message
+      const { data: lastMessages } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conv.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const lastMessage = lastMessages?.[0] || null
+
+      // Get unread count
+      let unreadCount = 0
+      if (myParticipation) {
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', conv.id)
+          .gt('created_at', myParticipation.last_read_at)
+          .neq('sender_id', currentUser.id)
+
+        unreadCount = count || 0
+      }
+
+      return {
+        ...conv,
+        other_participant: otherProfile,
+        last_message: lastMessage,
+        unread_count: unreadCount,
+      } as Conversation
+    })
+  )
+
+  return conversationsWithDetails
+}
+
+/**
+ * Get messages for a conversation with sender profiles.
+ */
+export const getMessages = async (conversationId: string, limit = 50, offset = 0): Promise<Message[]> => {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (error) throw error
+  if (!data || data.length === 0) return []
+
+  // Attach sender profiles
+  const senderIds = [...new Set(data.map((m: any) => m.sender_id))]
+  const profilesMap = new Map<string, Profile>()
+
+  if (senderIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', senderIds)
+
+    if (profiles) {
+      profiles.forEach((p: any) => profilesMap.set(p.id, p))
+    }
+  }
+
+  return data.map((msg: any) => ({
+    ...msg,
+    sender: profilesMap.get(msg.sender_id) || null,
+  })).reverse() as Message[]
+}
+
+/**
+ * Send a message in a conversation.
+ */
+export const sendMessage = async (
+  conversationId: string,
+  content: string,
+  messageType: Message['message_type'] = 'text',
+  imageUrl?: string
+): Promise<Message> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  await ensureProfile()
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: currentUser.id,
+      content,
+      message_type: messageType,
+      image_url: imageUrl || null,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  // Attach sender profile
+  const profile = await getProfile(currentUser.id)
+
+  return {
+    ...data,
+    sender: profile,
+  } as Message
+}
+
+/**
+ * Mark a conversation as read for the current user.
+ */
+export const markConversationRead = async (conversationId: string) => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('conversation_participants')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('conversation_id', conversationId)
+    .eq('user_id', currentUser.id)
+
+  if (error) throw error
+}
+
+/**
+ * Get total unread message count across all conversations for navbar badge.
+ */
+export const getUnreadConversationCount = async (): Promise<number> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return 0
+
+  try {
+    // Get user's participations
+    const { data: participations, error: partError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, last_read_at')
+      .eq('user_id', currentUser.id)
+
+    if (partError) throw partError
+    if (!participations || participations.length === 0) return 0
+
+    // Sum unread counts across all conversations
+    let totalUnread = 0
+    for (const p of participations) {
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', p.conversation_id)
+        .gt('created_at', p.last_read_at)
+        .neq('sender_id', currentUser.id)
+
+      totalUnread += count || 0
+    }
+
+    return totalUnread
+  } catch (err) {
+    console.error('Error getting unread count:', err)
+    return 0
+  }
+}
+
+/**
+ * Subscribe to new messages in a conversation (realtime).
+ */
+export const subscribeToConversationMessages = (
+  conversationId: string,
+  callback: (message: Message) => void
+) => {
+  const uniqueChannelName = `realtime-chat-${conversationId}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+  const channel = supabase
+    .channel(uniqueChannelName)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      async (payload: any) => {
+        // Attach sender profile
+        const profile = await getProfile(payload.new.sender_id).catch(() => null)
+        callback({
+          ...payload.new,
+          sender: profile,
+        } as Message)
+      }
+    )
+    .subscribe()
+
+  return channel
+}
+
+/**
+ * Subscribe to conversation list updates (new messages in any of user's conversations).
+ */
+export const subscribeToConversationList = (
+  userId: string,
+  callback: (payload: any) => void
+) => {
+  const uniqueChannelName = `realtime-conv-list-${userId}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+  // Get user's conversation IDs
+  supabase
+    .from('conversation_participants')
+    .select('conversation_id')
+    .eq('user_id', userId)
+    .then(({ data }) => {
+      if (data && data.length > 0) {
+        const convIds = data.map(d => d.conversation_id)
+        // Subscribe to message inserts in these conversations
+        supabase
+          .channel(uniqueChannelName)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'messages',
+              filter: `conversation_id=in.(${convIds.join(',')})`,
+            },
+            callback
+          )
+          .subscribe()
+      }
+    })
+
+  return { unsubscribe: () => supabase.removeChannel(supabase.channel(uniqueChannelName)) }
+}
+
+// ============== CALL SIGNALING HELPERS ==============
+
+/**
+ * Send a WebRTC signal (offer/answer/ICE candidate) to the other user.
+ */
+export const sendCallSignal = async (
+  conversationId: string,
+  receiverId: string,
+  signalData: any,
+  signalType: 'offer' | 'answer' | 'ice-candidate'
+): Promise<void> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('call_signals')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: currentUser.id,
+      receiver_id: receiverId,
+      signal_data: signalData,
+      signal_type: signalType,
+    })
+
+  if (error) throw error
+}
+
+/**
+ * Subscribe to incoming call signals for the current user (realtime).
+ */
+export const subscribeToCallSignals = (
+  userId: string,
+  callback: (signal: CallSignal) => void
+) => {
+  const uniqueChannelName = `realtime-call-${userId}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+  const channel = supabase
+    .channel(uniqueChannelName)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'call_signals',
+        filter: `receiver_id=eq.${userId}`,
+      },
+      async (payload: any) => {
+        const profile = await getProfile(payload.new.sender_id).catch(() => null)
+        callback({
+          ...payload.new,
+          sender: profile,
+        } as CallSignal)
+      }
+    )
+    .subscribe()
+
+  return channel
+}
+
+/**
+ * Delete call signals after processing (cleanup).
+ */
+export const deleteCallSignals = async (conversationId: string) => {
+  const { error } = await supabase
+    .from('call_signals')
+    .delete()
+    .eq('conversation_id', conversationId)
+
+  if (error) throw error
+}

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
-import { supabase, sendOtpToEmail, verifyEmailOtp, getProfile } from '../lib/supabaseClient'
+import { supabase, getProfile } from '../lib/supabaseClient'
 import type { Profile } from '../types'
 
 interface AuthContextType {
@@ -9,8 +9,6 @@ interface AuthContextType {
   loading: boolean
   profile: Profile | null
   refreshProfile: () => Promise<void>
-  sendOtp: (email: string) => Promise<void>
-  verifyOtp: (email: string, token: string) => Promise<void>
   signIn: (email: string, password: string) => Promise<any>
   signUp: (email: string, password: string, username?: string) => Promise<void>
   signOut: () => Promise<void>
@@ -74,21 +72,11 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Send OTP to email for login
-  const sendOtp = async (email: string) => {
-    await sendOtpToEmail(email)
-  }
-
   // Sign in with email + password
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
-  }
-
-  // Verify OTP code and sign in
-  const verifyOtp = async (email: string, token: string) => {
-    await verifyEmailOtp(email, token)
   }
 
   // Sign up — since email confirmation is disabled, user is auto-signed-in
@@ -125,7 +113,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, profile, refreshProfile, sendOtp, verifyOtp, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, profile, refreshProfile, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -138,4 +126,3 @@ export const useAuth = () => {
   }
   return context
 }
-
