@@ -87,16 +87,16 @@ const Chat = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-white">
+<div className="h-[calc(100vh-4rem)] flex bg-white overflow-hidden">
       {/* Chat List - Desktop sidebar */}
-      <div className={`w-full md:w-80 md:border-r md:border-gray-200 ${
+      <div className={`w-full md:w-80 md:border-r md:border-gray-200 overflow-hidden ${
         conversationId ? 'hidden md:block' : 'block'
       }`}>
         <ChatList />
       </div>
 
       {/* Chat Window */}
-      <div className={`flex-1 md:block ${
+      <div className={`flex-1 md:block min-h-0 ${
         conversationId ? 'block' : 'hidden md:block'
       }`}>
         {activeConversation ? (

@@ -34,6 +34,7 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
     endCall,
     toggleMic,
     toggleCamera,
+    toggleSpeaker,
     switchCamera,
   } = useCall()
 
@@ -94,6 +95,7 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
           onEndCall={endCall}
           onToggleMic={toggleMic}
           onToggleCamera={toggleCamera}
+          onToggleSpeaker={toggleSpeaker}
           onSwitchCamera={switchCamera}
           onAnswerCall={answerCall}
           onRejectCall={rejectCall}

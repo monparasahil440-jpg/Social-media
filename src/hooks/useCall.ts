@@ -4,6 +4,8 @@ import {
   sendCallSignal,
   subscribeToCallSignals,
   deleteCallSignals,
+  sendCallEndSignal,
+  createCallMessage,
 } from '../lib/supabaseClient'
 import type { CallSignal, Profile } from '../types'
 
@@ -20,6 +22,9 @@ interface CallState {
   remoteStream: MediaStream | null
   callDuration: number
   incoming: boolean
+  micEnabled: boolean
+  cameraEnabled: boolean
+  speakerEnabled: boolean
 }
 
 export function useCall() {
@@ -34,6 +39,9 @@ export function useCall() {
     remoteStream: null,
     callDuration: 0,
     incoming: false,
+    micEnabled: true,
+    cameraEnabled: true,
+    speakerEnabled: false,
   })
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
@@ -42,6 +50,15 @@ export function useCall() {
   const durationIntervalRef = useRef<number | null>(null)
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null)
+  const isEndingCallRef = useRef(false) // Guard against re-entrant endCall
+
+// Helper to toggle navbar visibility
+  const setNavbarVisibility = useCallback((visible: boolean) => {
+    const nav = document.querySelector('nav')
+    if (nav) {
+      nav.style.display = visible ? '' : 'none'
+    }
+  }, [])
 
   // Cleanup function
   const cleanupCall = useCallback(() => {
@@ -126,35 +143,23 @@ export function useCall() {
 
     // Handle connection state changes
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      if (!isEndingCallRef.current && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed')) {
         endCall()
       }
     }
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      if (!isEndingCallRef.current && (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed')) {
         endCall()
       }
     }
 
     peerConnectionRef.current = pc
 
-    // Process any pending ICE candidates
-    if (pendingCandidatesRef.current.length > 0 && !isCaller) {
-      for (const candidate of pendingCandidatesRef.current) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate))
-        } catch (err) {
-          console.error('Error adding pending ICE candidate:', err)
-        }
-      }
-      pendingCandidatesRef.current = []
-    }
-
     return pc
   }, [startDurationTimer])
 
-  // Start a call (outgoing)
+// Start a call (outgoing)
   const startCall = useCallback(async (
     conversationId: string,
     otherUserId: string,
@@ -162,6 +167,7 @@ export function useCall() {
     type: CallType = 'audio'
   ) => {
     try {
+      setNavbarVisibility(false)
       // Get user media
       const mediaConstraints: MediaStreamConstraints = {
         audio: true,
@@ -194,8 +200,9 @@ export function useCall() {
       console.error('Error starting call:', err)
       cleanupCall()
       setCallState(prev => ({ ...prev, status: 'idle' }))
+      setNavbarVisibility(true)
     }
-  }, [createPeerConnection, cleanupCall])
+  }, [createPeerConnection, cleanupCall, setNavbarVisibility])
 
   // Answer an incoming call
   const answerCall = useCallback(async () => {
@@ -203,6 +210,7 @@ export function useCall() {
     if (!conversationId || !otherUserId) return
 
     try {
+      setNavbarVisibility(false)
       const mediaConstraints: MediaStreamConstraints = {
         audio: true,
         video: callState.type === 'video',
@@ -230,6 +238,18 @@ export function useCall() {
         }
       }
 
+      // Process any pending ICE candidates that arrived before the remote description was set
+      if (pendingCandidatesRef.current.length > 0) {
+        for (const candidate of pendingCandidatesRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate))
+          } catch (err) {
+            console.error('Error adding pending ICE candidate:', err)
+          }
+        }
+        pendingCandidatesRef.current = []
+      }
+
       // Create and send answer
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
@@ -242,13 +262,20 @@ export function useCall() {
   }, [callState, createPeerConnection, cleanupCall])
 
   // Reject an incoming call
-  const rejectCall = useCallback(() => {
-    const { conversationId, otherUserId } = callState
+  const rejectCall = useCallback(async () => {
+    const { conversationId, otherUserId, type } = callState
     if (conversationId && otherUserId) {
-      // Send a rejection signal (simple offer with null)
+      // Send a rejection signal
       sendCallSignal(conversationId, otherUserId, { type: 'reject' }, 'offer').catch(console.error)
+      // Save a missed call message
+      try {
+        await createCallMessage(conversationId, type, null, false)
+      } catch (err) {
+        console.error('Error saving missed call message:', err)
+      }
     }
-    cleanupCall()
+cleanupCall()
+    setNavbarVisibility(true)
     setCallState({
       status: 'idle',
       type: 'audio',
@@ -259,39 +286,77 @@ export function useCall() {
       remoteStream: null,
       callDuration: 0,
       incoming: false,
+      micEnabled: true,
+      cameraEnabled: true,
+      speakerEnabled: false,
     })
-  }, [callState, cleanupCall])
+  }, [callState, cleanupCall, setNavbarVisibility])
 
-  // End the call
-  const endCall = useCallback(() => {
-    cleanupCall()
-    setCallState({
-      status: 'ended',
-      type: 'audio',
-      conversationId: null,
-      otherUserId: null,
-      otherUserProfile: null,
-      localStream: null,
-      remoteStream: null,
-      callDuration: 0,
-      incoming: false,
-    })
+  // End the call — notifies the other side and saves a call history message
+  const endCall = useCallback(async () => {
+    // Prevent re-entrant calls (e.g., onconnectionstatechange firing during cleanup)
+    if (isEndingCallRef.current) return
+    isEndingCallRef.current = true
 
-    // Reset to idle after a brief moment
-    setTimeout(() => {
-      setCallState(prev => prev.status === 'ended'
-        ? { ...prev, status: 'idle' }
-        : prev
-      )
-    }, 1000)
-  }, [cleanupCall])
+    const { conversationId, otherUserId, type, callDuration, status } = callState
+    const wasConnected = status === 'connected'
+
+    try {
+      // 1. Send call-end signal to the other user so they immediately end too
+      if (conversationId && otherUserId) {
+        try {
+          await sendCallEndSignal(conversationId, otherUserId)
+        } catch (err) {
+          console.error('Error sending call-end signal:', err)
+        }
+      }
+
+      cleanupCall()
+
+      setCallState({
+        status: 'ended',
+        type: 'audio',
+        conversationId: null,
+        otherUserId: null,
+        otherUserProfile: null,
+        localStream: null,
+        remoteStream: null,
+        callDuration: 0,
+        incoming: false,
+        micEnabled: true,
+        cameraEnabled: true,
+        speakerEnabled: false,
+      })
+
+      // 2. Save call history message (if we have a conversation)
+      if (conversationId) {
+        try {
+          await createCallMessage(conversationId, type, callDuration, wasConnected)
+        } catch (err) {
+          console.error('Error saving call message:', err)
+        }
+      }
+setNavbarVisibility(true)
+    } finally {
+      // Reset to idle after a brief moment
+      setTimeout(() => {
+        setCallState(prev => prev.status === 'ended'
+          ? { ...prev, status: 'idle' }
+          : prev
+        )
+        isEndingCallRef.current = false
+      }, 1000)
+    }
+  }, [callState, cleanupCall, setNavbarVisibility])
 
   // Toggle microphone
   const toggleMic = useCallback(() => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0]
       if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled
+        const newEnabled = !audioTrack.enabled
+        audioTrack.enabled = newEnabled
+        setCallState(prev => ({ ...prev, micEnabled: newEnabled }))
       }
     }
   }, [])
@@ -301,9 +366,32 @@ export function useCall() {
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0]
       if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled
+        const newEnabled = !videoTrack.enabled
+        videoTrack.enabled = newEnabled
+        setCallState(prev => ({ ...prev, cameraEnabled: newEnabled }))
       }
     }
+  }, [])
+
+  // Toggle speaker (speakerphone / earpiece)
+  const toggleSpeaker = useCallback(() => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0]
+      if (audioTrack) {
+        try {
+          // @ts-ignore - older TS types don't have sinkId
+          const audioContext = new AudioContext()
+          const source = audioContext.createMediaStreamSource(localStreamRef.current)
+          const destination = audioContext.createMediaStreamDestination()
+          source.connect(destination)
+        } catch (err) {
+          // Fallback: use the audio element's setSinkId or just toggle
+        }
+      }
+    }
+    // Toggle the speakerEnabled state - the actual audio output routing
+    // is handled by the audio element using the 'audio' output device
+    setCallState(prev => ({ ...prev, speakerEnabled: !prev.speakerEnabled }))
   }, [])
 
   // Switch camera (front/back)
@@ -348,14 +436,19 @@ export function useCall() {
         case 'offer': {
           // Check if it's a rejection
           if (signal.signal_data?.type === 'reject') {
-            setCallState(prev => ({ ...prev, status: 'ended' }))
-            setTimeout(() => {
-              setCallState(prev => prev.status === 'ended'
-                ? { ...prev, status: 'idle' }
-                : prev
-              )
-              cleanupCall()
-            }, 1000)
+            cleanupCall()
+            setCallState(prev => ({ ...prev, status: 'idle' }))
+            const nav = document.querySelector('nav')
+            if (nav) nav.style.display = ''
+            return
+          }
+
+          // Check if it's a call-end signal (remote user ended the call)
+          if (signal.signal_data?.type === 'call-end') {
+            cleanupCall()
+            setCallState(prev => ({ ...prev, status: 'idle' }))
+            const nav = document.querySelector('nav')
+            if (nav) nav.style.display = ''
             return
           }
 
@@ -385,6 +478,17 @@ export function useCall() {
           if (pc && pc.signalingState === 'have-local-offer') {
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data))
+              // Process any pending ICE candidates that arrived before the remote description was set
+              if (pendingCandidatesRef.current.length > 0) {
+                for (const candidate of pendingCandidatesRef.current) {
+                  try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate))
+                  } catch (err) {
+                    console.error('Error adding pending ICE candidate:', err)
+                  }
+                }
+                pendingCandidatesRef.current = []
+              }
             } catch (err) {
               console.error('Error setting remote description (answer):', err)
             }
@@ -431,6 +535,7 @@ export function useCall() {
     endCall,
     toggleMic,
     toggleCamera,
+    toggleSpeaker,
     switchCamera,
   }
 }

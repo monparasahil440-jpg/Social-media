@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import Avatar from '../Avatar'
 import CallControls from './CallControls'
 import type { CallStatus, CallType } from '../../hooks/useCall'
@@ -14,6 +14,9 @@ interface CallState {
   remoteStream: MediaStream | null
   callDuration: number
   incoming: boolean
+  micEnabled: boolean
+  cameraEnabled: boolean
+  speakerEnabled: boolean
 }
 
 interface CallUIProps {
@@ -21,6 +24,7 @@ interface CallUIProps {
   onEndCall: () => void
   onToggleMic: () => void
   onToggleCamera: () => void
+  onToggleSpeaker: () => void
   onSwitchCamera: () => void
   onAnswerCall?: () => void
   onRejectCall?: () => void
@@ -31,28 +35,38 @@ const CallUI = ({
   onEndCall,
   onToggleMic,
   onToggleCamera,
+  onToggleSpeaker,
   onSwitchCamera,
   onAnswerCall,
   onRejectCall,
 }: CallUIProps) => {
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const micEnabledRef = useRef(true)
-  const cameraEnabledRef = useRef(true)
+  const localStreamRef = useRef<MediaStream | null>(null)
+  const remoteStreamRef = useRef<MediaStream | null>(null)
 
-  // Attach local stream to video element
-  useEffect(() => {
-    if (localVideoRef.current && callState.localStream) {
-      localVideoRef.current.srcObject = callState.localStream
-    }
-  }, [callState.localStream])
+  // Keep refs in sync with callState
+  localStreamRef.current = callState.localStream
+  remoteStreamRef.current = callState.remoteStream
 
-  // Attach remote stream to video element
-  useEffect(() => {
-    if (remoteVideoRef.current && callState.remoteStream) {
-      remoteVideoRef.current.srcObject = callState.remoteStream
+  // Callback ref for local video — auto-attaches stream on mount
+  const localVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    if (el && localStreamRef.current) {
+      el.srcObject = localStreamRef.current
     }
-  }, [callState.remoteStream])
+  }, [])
+
+  // Callback ref for remote video — auto-attaches stream on mount
+  const remoteVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    if (el && remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current
+    }
+  }, [])
+
+  // Callback ref for remote audio — auto-attaches stream on mount
+  const remoteAudioRef = useCallback((el: HTMLAudioElement | null) => {
+    if (el && remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current
+    }
+  }, [])
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -80,6 +94,16 @@ const CallUI = ({
 
   return (
     <div className="absolute inset-0 z-30 bg-gray-900 flex flex-col">
+      {/* Hidden audio element for audio-only calls to play remote audio */}
+      {callState.type === 'audio' && callState.status === 'connected' && (
+        <audio
+          ref={remoteAudioRef}
+          autoPlay
+          playsInline
+          className="hidden"
+        />
+      )}
+
       {/* Video Streams */}
       {callState.type === 'video' && callState.status === 'connected' && (
         <>
@@ -89,16 +113,16 @@ const CallUI = ({
             autoPlay
             playsInline
             className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: 'center bottom' }}
           />
 
           {/* Local video (picture-in-picture) */}
-          <div className="absolute top-4 right-4 w-32 h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white/30 bg-gray-800 z-10">
+          <div className="local-video-pip">
             <video
               ref={localVideoRef}
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover"
             />
           </div>
         </>
@@ -115,7 +139,6 @@ const CallUI = ({
                 size="w-24 h-24"
               />
             </div>
-          </div>
           <h2 className="text-xl font-bold mb-1">
             {callState.otherUserProfile?.full_name || callState.otherUserProfile?.username || 'User'}
           </h2>
@@ -141,8 +164,9 @@ const CallUI = ({
             </div>
           )}
         </div>
+        </div>
       )}
-
+    
       {/* Connected video call overlay */}
       {callState.type === 'video' && callState.status === 'connected' && (
         <div className="absolute top-4 left-4 z-10">
@@ -152,11 +176,11 @@ const CallUI = ({
         </div>
       )}
 
-      {/* Bottom Controls */}
-      <div className="pb-8 pt-4 px-4 bg-gradient-to-t from-black/60 to-transparent">
+      {/* Bottom Controls - glass effect, pushed to bottom */}
+      <div className="call-controls-glass">
         {/* Incoming call controls */}
         {callState.status === 'ringing' && callState.incoming && (
-          <div className="flex items-center justify-center gap-8 mb-6">
+          <div className="flex items-center justify-center gap-8">
             <button
               onClick={onRejectCall}
               className="p-4 rounded-full bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg"
@@ -182,10 +206,12 @@ const CallUI = ({
         {(callState.status === 'calling' || callState.status === 'connected') && (
           <CallControls
             isVideo={callState.type === 'video'}
-            micEnabled={true}
-            cameraEnabled={true}
+            micEnabled={callState.micEnabled}
+            cameraEnabled={callState.cameraEnabled}
+            speakerEnabled={callState.speakerEnabled}
             onToggleMic={onToggleMic}
             onToggleCamera={onToggleCamera}
+            onToggleSpeaker={onToggleSpeaker}
             onSwitchCamera={onSwitchCamera}
             onEndCall={onEndCall}
           />
@@ -196,4 +222,3 @@ const CallUI = ({
 }
 
 export default CallUI
-

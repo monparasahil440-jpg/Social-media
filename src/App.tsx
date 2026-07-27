@@ -25,7 +25,7 @@ function App() {
       <HashRouter>      
         <div className="min-h-screen bg-gray-50">
         {user && <Navbar />}
-        <main className={user ? 'pb-8' : ''}>
+<main>
           <Routes>
             <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />

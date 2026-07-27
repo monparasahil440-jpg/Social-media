@@ -65,6 +65,75 @@ input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 30px white inset !important;
 }
 
+/* Call controls glass container */
+.call-controls-glass {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  margin-top: auto;
+  margin-bottom: 20px;
+  padding: 20px;
+  border-radius: 30px;
+  background-color: rgba(0, 0, 0, 0.27);
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.59);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Local video picture-in-picture container */
+.local-video-pip {
+  position: absolute;
+  inset: 0;
+  margin: 32px 32px auto auto;
+  width: 200px;
+  height: 300px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background-color: #1f2937;
+  z-index: 10;
+}
+
+.local-video-pip video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 768px) {
+  .local-video-pip {
+    margin: 32px 32px auto auto;
+    width: 140px;
+    height: 200px;
+  }
+
+  .call-controls-glass {
+    margin-top: auto !important;
+    margin: 0 16px;
+    width: auto;
+    max-width: 100%;
+    padding: 20px 16px;
+    margin-bottom: 24px;
+  }
+
+  .call-controls-glass > div {
+    flex-wrap: wrap;
+  }
+
+  .call-controls-glass button {
+    padding: 12px !important;
+  }
+
+  .call-controls-glass button svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
 /* Toast animation */
 @keyframes slideUp {
   from {
@@ -80,4 +149,3 @@ input:-webkit-autofill:focus {
 .animate-slide-up {
   animation: slideUp 0.3s ease-out;
 }
-

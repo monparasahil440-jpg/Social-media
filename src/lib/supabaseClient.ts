@@ -929,8 +929,18 @@ export async function getOtherParticipantInConversation(
   if (!pErr && participants) {
     const other = participants.find((p: any) => p.user_id !== currentUserId)
     if (other?.profiles) {
-      console.log(`[getOtherParticipant] Tier-1 success for conv ${conversationId}:`, other.profiles.username)
-      return other.profiles as Profile
+  const profile = Array.isArray(other.profiles)
+    ? other.profiles[0]
+    : other.profiles;
+
+      if (profile) {
+        console.log(
+          `[getOtherParticipant] Tier-1 success for conv ${conversationId}:`,
+          profile.username
+        );
+
+        return profile as Profile;
+      }
     }
     // If we got exactly 2 rows but the other row's profile somehow null,
     // try fetching profile manually by user_id
@@ -1476,4 +1486,70 @@ export const deleteCallSignals = async (conversationId: string) => {
     .eq('conversation_id', conversationId)
 
   if (error) throw error
+}
+
+/**
+ * Send a "call-end" signal to notify the other user that the call has ended.
+ * This enables the remote side to immediately end the call too.
+ */
+export const sendCallEndSignal = async (
+  conversationId: string,
+  receiverId: string
+): Promise<void> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('call_signals')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: currentUser.id,
+      receiver_id: receiverId,
+      signal_data: { type: 'call-end' },
+      signal_type: 'offer', // Reuse 'offer' type since db enum might not have 'call-end'
+    })
+
+  if (error) throw error
+}
+
+/**
+ * Save a call event message (answered/missed call) to the conversation.
+ * This shows up in the chat like Instagram's call history.
+ */
+export const createCallMessage = async (
+  conversationId: string,
+  callType: 'audio' | 'video',
+  callDuration: number | null,
+  wasAnswered: boolean
+): Promise<Message> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  await ensureProfile()
+
+  let content: string
+  if (wasAnswered) {
+    content = callType === 'video' ? 'Video call' : 'Audio call'
+  } else {
+    content = callType === 'video' ? 'Missed video call' : 'Missed audio call'
+  }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: currentUser.id,
+      content,
+      message_type: 'call',
+      call_type: callType,
+      call_duration: callDuration,
+      image_url: null,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  const profile = await getProfile(currentUser.id)
+  return { ...data, sender: profile } as Message
 }
