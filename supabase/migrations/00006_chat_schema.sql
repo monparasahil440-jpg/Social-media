@@ -81,6 +81,12 @@ CREATE POLICY "Participants can view conversations"
     )
   );
 
+-- Conversations: any authenticated user can create (needed for starting a new conversation)
+CREATE POLICY "Authenticated users can create conversations"
+  ON public.conversations FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- Conversations: participants can update
 CREATE POLICY "Participants can update conversations"
   ON public.conversations FOR UPDATE
   USING (
@@ -99,7 +105,6 @@ CREATE POLICY "Users can view their participations"
 CREATE POLICY "Users can insert participations"
   ON public.conversation_participants FOR INSERT
   WITH CHECK (
-    -- Allow insert if user is part of the conversation
     auth.uid() = user_id
     OR EXISTS (
       SELECT 1 FROM public.conversation_participants
@@ -188,5 +193,3 @@ DROP TRIGGER IF EXISTS on_message_notification ON public.messages;
 CREATE TRIGGER on_message_notification
   AFTER INSERT ON public.messages
   FOR EACH ROW EXECUTE FUNCTION public.handle_message_notification();
-
-

@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import ChatList from '../components/Chat/ChatList'
 import ChatWindow from '../components/Chat/ChatWindow'
-import { getUserConversations } from '../lib/supabaseClient'
+import { getUserConversations, getOtherParticipantInConversation } from '../lib/supabaseClient'
+import { useAuth } from '../hooks/useAuth'
 import LoadingSpinner from '../components/LoadingSpinner'
 import type { Conversation } from '../types'
 
 const Chat = () => {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams<{ conversationId?: string }>()
   const location = useLocation()
@@ -21,16 +23,40 @@ const Chat = () => {
     loadConversations()
   }, [])
 
+  // Ensure the active conversation always has other_participant
+  const ensureOtherParticipant = useCallback(async (conv: Conversation): Promise<Conversation> => {
+    if (conv.other_participant) return conv
+    if (!user || !conv.id) return conv
+
+    try {
+      const profile = await getOtherParticipantInConversation(conv.id, user.id)
+      if (profile) {
+        return { ...conv, other_participant: profile }
+      }
+    } catch (err) {
+      console.warn('[Chat] Could not fetch other participant for conv', conv.id, err)
+    }
+    return conv
+  }, [user])
+
   useEffect(() => {
-    if (conversationId && conversations.length > 0) {
-      const found = conversations.find(c => c.id === conversationId)
-      setActiveConversation(found || null)
-    } else if (newConversationFromState) {
-      setActiveConversation(newConversationFromState)
-    } else {
+    const resolveActiveConversation = async () => {
+      if (conversationId && conversations.length > 0) {
+        const found = conversations.find(c => c.id === conversationId)
+        if (found) {
+          const enriched = await ensureOtherParticipant(found)
+          setActiveConversation(enriched)
+          return
+        }
+      } else if (newConversationFromState) {
+        const enriched = await ensureOtherParticipant(newConversationFromState)
+        setActiveConversation(enriched)
+        return
+      }
       setActiveConversation(null)
     }
-  }, [conversationId, conversations, newConversationFromState])
+    resolveActiveConversation()
+  }, [conversationId, conversations, newConversationFromState, ensureOtherParticipant])
 
   const loadConversations = async () => {
     try {

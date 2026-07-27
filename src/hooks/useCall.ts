@@ -41,6 +41,7 @@ export function useCall() {
   const remoteStreamRef = useRef<MediaStream | null>(null)
   const durationIntervalRef = useRef<number | null>(null)
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([])
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null)
 
   // Cleanup function
   const cleanupCall = useCallback(() => {
@@ -66,6 +67,7 @@ export function useCall() {
     remoteStreamRef.current = null
 
     pendingCandidatesRef.current = []
+    pendingOfferRef.current = null
   }, [])
 
   // Start call duration timer
@@ -214,8 +216,19 @@ export function useCall() {
         status: 'connected',
       }))
 
-      // Create peer connection
+      // Create peer connection for the answerer
       const pc = await createPeerConnection(stream, conversationId, otherUserId, false)
+
+      // Apply the pending offer BEFORE creating the answer
+      // This is critical: the remote description must be set first
+      if (pendingOfferRef.current) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(pendingOfferRef.current))
+          pendingOfferRef.current = null
+        } catch (err) {
+          console.error('Error setting remote description from pending offer:', err)
+        }
+      }
 
       // Create and send answer
       const answer = await pc.createAnswer()
@@ -346,24 +359,25 @@ export function useCall() {
             return
           }
 
-          // Incoming call
-          setCallState(prev => ({
-            ...prev,
-            status: 'ringing',
-            type: signal.signal_data?.sdp?.includes('video') ? 'video' : 'audio',
-            conversationId: signal.conversation_id,
-            otherUserId: signal.sender_id,
-            otherUserProfile: signal.sender || null,
-            incoming: true,
-          }))
-
-          if (pc) {
-            try {
-              await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data))
-            } catch (err) {
-              console.error('Error setting remote description (offer):', err)
+          // Incoming call — use functional updater to avoid stale state
+          setCallState(prev => {
+            // Don't overwrite an active call
+            if (prev.status !== 'idle' && prev.status !== 'ended') return prev
+            return {
+              ...prev,
+              status: 'ringing',
+              type: signal.signal_data?.sdp?.includes('video') ? 'video' : 'audio',
+              conversationId: signal.conversation_id,
+              otherUserId: signal.sender_id,
+              otherUserProfile: signal.sender || null,
+              incoming: true,
             }
-          }
+          })
+
+          // Store the offer so answerCall can use it later.
+          // At this point pc is null because the peer connection
+          // hasn't been created yet — it will be created in answerCall.
+          pendingOfferRef.current = signal.signal_data as RTCSessionDescriptionInit
           break
         }
 
@@ -398,12 +412,16 @@ export function useCall() {
 
     return () => {
       sub.unsubscribe()
-      // Clean up call signals for active conversation
-      if (callState.conversationId) {
-        deleteCallSignals(callState.conversationId).catch(console.error)
-      }
+      // IMPORTANT: Do NOT delete call signals here.
+      // Previously we called deleteCallSignals() which DESTROYED
+      // incoming offers before the user could answer them.
+      // Call signals are cleaned up when the call ends naturally.
     }
-  }, [user, callState.conversationId, cleanupCall])
+  }, [user, cleanupCall])
+  // Intentionally NOT including callState.conversationId in deps.
+  // The subscription must stay alive for the entire component lifecycle.
+  // Including conversationId would tear down and recreate the subscription
+  // on every state change, deleting incoming signals in the process.
 
   return {
     callState,
@@ -416,4 +434,3 @@ export function useCall() {
     switchCamera,
   }
 }
-

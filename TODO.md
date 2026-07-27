@@ -1,34 +1,22 @@
-# Chat + Voice/Video Call Implementation - ✅ COMPLETE
+# Chat System Audit - Fixes Applied
 
-## Phase 1: Database Schema
-- [x] Create migration `00006_chat_schema.sql` (conversations, participants, messages, call_signals)
+## Bug 1: "Unknown User" in conversations (Profile data not attached)
+- **Root Cause**: `conversation_participants` RLS policy blocked reading other participant's row
+- **Fix**: Added `getOtherParticipantInConversation()` helper with 3-tier fallback
+- **Status**: ✅ Fixed in `src/lib/supabaseClient.ts`
 
-## Phase 2: Types & API
-- [x] Update `src/types/index.ts` with new interfaces
-- [x] Add chat helpers to `src/lib/supabaseClient.ts`
+## Bug 2: Calls not being received (incoming offer destroyed)
+- **Root Cause 1**: Cleanup function in `useCall.ts` signal subscription called `deleteCallSignals()`, destroying incoming offers before user could answer
+- **Root Cause 2**: Incoming offer was never stored; `answerCall()` tried to call `createAnswer()` without setting remote description first
+- **Fix**: 
+  1. Removed `deleteCallSignals()` from subscription cleanup
+  2. Added `pendingOfferRef` to store incoming offer
+  3. `answerCall()` now applies the pending offer before creating answer
+  4. Changed `useEffect` deps to not include `callState.conversationId` (prevent subscription teardown)
+- **Status**: ✅ Fixed in `src/hooks/useCall.ts`
 
-## Phase 3: Hooks
-- [x] Create `src/hooks/useChat.ts`
-- [x] Create `src/hooks/useCall.ts`
-
-## Phase 4: UI Components
-- [x] Create `src/components/Chat/ChatList.tsx`
-- [x] Create `src/components/Chat/ChatWindow.tsx`
-- [x] Create `src/components/Chat/MessageBubble.tsx`
-- [x] Create `src/components/Chat/ChatInput.tsx`
-- [x] Create `src/components/Chat/NewChatModal.tsx`
-- [x] Create `src/components/Call/CallUI.tsx`
-- [x] Create `src/components/Call/CallControls.tsx`
-
-## Phase 5: Pages & Routing
-- [x] Create `src/pages/Chat.tsx`
-- [x] Update `src/App.tsx` with chat routes
-- [x] Update `src/components/Navbar.tsx` with chat icon + unread badge
-
-## Phase 6: Voice/Video Call (WebRTC)
-- [x] Implement WebRTC signaling in useCall hook
-- [x] Integrate call UI with incoming call detection
-
-## How to deploy the SQL migration
-Run the migration `supabase/migrations/00006_chat_schema.sql` in your Supabase SQL editor.
+## Bug 3: Missing onAnswerCall/onRejectCall props in ChatWindow
+- **Root Cause**: `ChatWindow.tsx` wasn't passing `answerCall` and `rejectCall` to `CallUI`
+- **Fix**: Added `onAnswerCall={answerCall}` and `onRejectCall={rejectCall}` to `CallUI` props
+- **Status**: ✅ Fixed in `src/components/Chat/ChatWindow.tsx`
 

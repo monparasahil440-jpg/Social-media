@@ -43,6 +43,23 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
   const otherUser = conversation.other_participant
   const isInCall = callState.status !== 'idle' && callState.status !== 'ended'
 
+  // [DEBUG] Log complete conversation object and participant details
+  console.group('[ChatWindow] Debug: Conversation Data')
+  console.log('Complete conversation object:', JSON.parse(JSON.stringify(conversation)))
+  console.log('Conversation ID:', conversation.id)
+  console.log('other_participant:', conversation.other_participant)
+  console.log('participants:', conversation.participants)
+  console.log('Current user ID:', user?.id)
+  console.log('Username fallback chain - full_name:', otherUser?.full_name, '| username:', otherUser?.username, '| avatar_url:', otherUser?.avatar_url)
+  if (!otherUser) {
+    console.warn('[ChatWindow] other_participant is NULL/UNDEFINED! This means the profile was not attached to the conversation object.')
+    console.warn('[ChatWindow] Conversation keys:', Object.keys(conversation))
+    console.warn('[ChatWindow] Conversation ID type:', typeof conversation.id)
+  } else {
+    console.log('[ChatWindow] Profile loaded successfully:', otherUser.full_name || otherUser.username)
+  }
+  console.groupEnd()
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -70,7 +87,7 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Call UI Overlay */}
+{/* Call UI Overlay */}
       {isInCall && (
         <CallUI
           callState={callState}
@@ -78,6 +95,8 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
           onToggleMic={toggleMic}
           onToggleCamera={toggleCamera}
           onSwitchCamera={switchCamera}
+          onAnswerCall={answerCall}
+          onRejectCall={rejectCall}
         />
       )}
 

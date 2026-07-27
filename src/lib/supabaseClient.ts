@@ -900,6 +900,91 @@ export const subscribeToLikes = (postId: string, callback: (payload: any) => voi
 
 // ============== CHAT HELPERS ==============
 
+// ────────────────────────────────────────────
+// Helper: Get the other participant's profile in a 1-on-1 conversation
+// Uses 3-tier fallback to handle restrictive RLS policies:
+//   Tier 1: Try direct DB query on conversation_participants (needs migration 00009)
+//   Tier 2: Probe the messages table for a sender_id != current user
+//   Tier 3: If messages has no rows yet, return null (caller can try getProfile)
+// ────────────────────────────────────────────
+export async function getOtherParticipantInConversation(
+  conversationId: string,
+  currentUserId: string
+): Promise<Profile | null> {
+  // ── Tier 1: Query conversation_participants directly ──
+  // This works if migration 00009 (broadened SELECT policy) has been applied.
+  const { data: participants, error: pErr } = await supabase
+    .from('conversation_participants')
+    .select(`
+      user_id,
+      profiles!inner (
+        id,
+        username,
+        full_name,
+        avatar_url
+      )
+    `)
+    .eq('conversation_id', conversationId)
+
+  if (!pErr && participants) {
+    const other = participants.find((p: any) => p.user_id !== currentUserId)
+    if (other?.profiles) {
+      console.log(`[getOtherParticipant] Tier-1 success for conv ${conversationId}:`, other.profiles.username)
+      return other.profiles as Profile
+    }
+    // If we got exactly 2 rows but the other row's profile somehow null,
+    // try fetching profile manually by user_id
+    if (other?.user_id) {
+      const profile = await getProfile(other.user_id)
+      if (profile) {
+        console.log(`[getOtherParticipant] Tier-1 fallback (direct getProfile) for conv ${conversationId}:`, profile.username)
+        return profile
+      }
+    }
+  }
+
+  // ── Tier 2: Look through messages for a sender who is not the current user ──
+  // The messages RLS policy lets participants see all messages in conversations
+  // they belong to, so this works even if conversation_participants SELECT is restricted.
+  const { data: msgs, error: mErr } = await supabase
+    .from('messages')
+    .select('sender_id')
+    .eq('conversation_id', conversationId)
+    .neq('sender_id', currentUserId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (!mErr && msgs && msgs.length > 0) {
+    const otherUserId = msgs[0].sender_id
+    const profile = await getProfile(otherUserId)
+    if (profile) {
+      console.log(`[getOtherParticipant] Tier-2 success (from messages) for conv ${conversationId}:`, profile.username)
+      return profile
+    }
+  }
+
+  // ── Tier 3: If no messages yet, try getProfile on any participant that isn't us ──
+  // This time without the nested join (in case the join itself fails due to RLS)
+  const { data: rawParts, error: rErr } = await supabase
+    .from('conversation_participants')
+    .select('user_id')
+    .eq('conversation_id', conversationId)
+
+  if (!rErr && rawParts) {
+    const otherRow = rawParts.find((p: any) => p.user_id !== currentUserId)
+    if (otherRow?.user_id) {
+      const profile = await getProfile(otherRow.user_id)
+      if (profile) {
+        console.log(`[getOtherParticipant] Tier-3 success (raw user_id + getProfile) for conv ${conversationId}:`, profile.username)
+        return profile
+      }
+    }
+  }
+
+  console.warn(`[getOtherParticipant] All tiers exhausted for conv ${conversationId} — no other participant found`)
+  return null
+}
+
 /**
  * Create a new conversation or get existing one between two users.
  * For 1-on-1 chat, this ensures only one conversation exists per pair.
@@ -910,62 +995,95 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
 
   try {
     // Check if a 1-on-1 conversation already exists between these two users
-    const { data: existingConversations, error: searchError } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', currentUser.id)
+    let existingConversationId: string | null = null
 
-    if (searchError) throw searchError
-
-    if (existingConversations && existingConversations.length > 0) {
-      const conversationIds = existingConversations.map(c => c.conversation_id)
-
-      // Check if any of these conversations also include the other user
-      const { data: mutual, error: mutualError } = await supabase
+    try {
+      const { data: existingConversations, error: searchError } = await supabase
         .from('conversation_participants')
         .select('conversation_id')
-        .eq('user_id', otherUserId)
-        .in('conversation_id', conversationIds)
+        .eq('user_id', currentUser.id)
 
-      if (mutualError) throw mutualError
+      if (!searchError && existingConversations && existingConversations.length > 0) {
+        const conversationIds = existingConversations.map(c => c.conversation_id)
 
-      if (mutual && mutual.length > 0) {
-        // Existing conversation found
-        const { data: conv, error: convError } = await supabase
-          .from('conversations')
-          .select('*')
-          .eq('id', mutual[0].conversation_id)
-          .single()
+        const { data: mutual, error: mutualError } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id')
+          .eq('user_id', otherUserId)
+          .in('conversation_id', conversationIds)
 
-        if (convError) throw convError
-        return conv as Conversation
+        if (!mutualError && mutual && mutual.length > 0) {
+          existingConversationId = mutual[0].conversation_id
+        }
       }
+    } catch {
+      // RLS might be broken — fall through to creating a new conversation
+      console.warn('[createOrGetConversation] Could not check existing conversations due to RLS — will create new one')
     }
 
-    // Create new conversation
-    const { data: newConversation, error: createError } = await supabase
+    if (existingConversationId) {
+      const { data: conv, error: convError } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', existingConversationId)
+        .single()
+
+      if (convError) throw convError
+
+      const otherProfile = await getProfile(otherUserId)
+
+      return {
+        ...conv,
+        other_participant: otherProfile,
+      } as Conversation
+    }
+
+    // Generate UUID client-side to avoid RLS SELECT policy blocking the insert return value
+    const conversationId = crypto.randomUUID()
+
+    const { error: createError } = await supabase
       .from('conversations')
-      .insert({})
-      .select('*')
-      .single()
+      .insert({ id: conversationId })
 
     if (createError) throw createError
 
-    // Add both participants
-    const participants = [
-      { conversation_id: newConversation.id, user_id: currentUser.id },
-      { conversation_id: newConversation.id, user_id: otherUserId },
-    ]
-
-    const { error: participantError } = await supabase
+    // Add current user as participant first
+    const { error: participantError1 } = await supabase
       .from('conversation_participants')
-      .insert(participants)
+      .insert({ conversation_id: conversationId, user_id: currentUser.id })
 
-    if (participantError) throw participantError
+    if (participantError1) {
+      console.error('createOrGetConversation: failed to insert current user as participant', participantError1)
+      throw participantError1
+    }
 
-    return newConversation as Conversation
+    // Add other user as participant
+    const { error: participantError2 } = await supabase
+      .from('conversation_participants')
+      .insert({ conversation_id: conversationId, user_id: otherUserId })
+
+    if (participantError2) {
+      console.error('createOrGetConversation: failed to insert other user as participant', participantError2)
+      throw participantError2
+    }
+
+    // Now fetch the full conversation
+    const { data: fullConversation, error: fetchError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', conversationId)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Fetch the other participant's profile
+    const otherProfile = await getProfile(otherUserId)
+
+    return {
+      ...fullConversation,
+      other_participant: otherProfile,
+    } as Conversation
   } catch (err: any) {
-    // Gracefully handle missing tables (migration not run yet)
     if (err?.code === 'PGRST205' || err?.message?.includes('Could not find the table')) {
       console.warn('Chat tables not available yet. Run the migration first.')
       throw new Error('Chat tables not set up. Please run the database migration.')
@@ -976,23 +1094,49 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
 
 /**
  * Get all conversations for the current user with the last message and other participant profile.
+ * Works even when conversation_participants RLS is broken (recursive policy).
+ * Uses messages table as the primary source of conversation IDs as a fallback.
  */
 export const getUserConversations = async (): Promise<Conversation[]> => {
   const currentUser = await getCurrentUser()
   if (!currentUser) return []
 
-  // Get conversations the user is part of
-  const { data: participations, error: partError } = await supabase
-    .from('conversation_participants')
-    .select('conversation_id')
-    .eq('user_id', currentUser.id)
+  // ─── STEP 1: Get conversation IDs the user is part of ───
+  // Primary method: use conversation_participants (needs working RLS)
+  let conversationIds: string[] = []
 
-  if (partError) throw partError
-  if (!participations || participations.length === 0) return []
+  try {
+    const { data: participations, error: partError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', currentUser.id)
 
-  const conversationIds = participations.map(p => p.conversation_id)
+    if (partError) throw partError
+    if (participations) {
+      conversationIds = participations.map(p => p.conversation_id)
+    }
+  } catch (err: any) {
+    // If RLS recursion (42P17) or any other error, fallback to messages table
+    console.warn('[getUserConversations] conversation_participants query failed, falling back to messages:', err?.code || err?.message)
+    try {
+      const { data: sentMessages } = await supabase
+        .from('messages')
+        .select('conversation_id')
+        .eq('sender_id', currentUser.id)
+        .order('created_at', { ascending: false })
 
-  // Get conversations ordered by last_message_at
+      if (sentMessages) {
+        conversationIds = [...new Set(sentMessages.map(m => m.conversation_id))]
+      }
+    } catch (msgErr: any) {
+      console.error('[getUserConversations] messages fallback also failed:', msgErr)
+      return []
+    }
+  }
+
+  if (conversationIds.length === 0) return []
+
+  // ─── STEP 2: Get conversations ordered by last_message_at ───
   const { data: conversations, error: convError } = await supabase
     .from('conversations')
     .select('*')
@@ -1002,23 +1146,31 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
   if (convError) throw convError
   if (!conversations) return []
 
-  // For each conversation, get participants and last message
+  // ─── STEP 3: Get my last_read_at timestamps ───
+  let myLastReadAt: Record<string, string> = {}
+  try {
+    const { data: myParticipations } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, last_read_at')
+      .eq('user_id', currentUser.id)
+      .in('conversation_id', conversationIds)
+
+    if (myParticipations) {
+      for (const p of myParticipations) {
+        myLastReadAt[p.conversation_id] = p.last_read_at
+      }
+    }
+  } catch {
+    // RLS might block this too — that's okay, we'll use 0 unread
+    myLastReadAt = {}
+  }
+
+  // ─── STEP 4: Build enriched conversation objects ───
   const conversationsWithDetails: Conversation[] = await Promise.all(
     conversations.map(async (conv: any) => {
-      // Get other participant
-      const { data: participants } = await supabase
-        .from('conversation_participants')
-        .select('user_id, last_read_at')
-        .eq('conversation_id', conv.id)
+      const otherProfile = await getOtherParticipantInConversation(conv.id, currentUser.id)
 
-      const otherParticipantId = participants?.find((p: any) => p.user_id !== currentUser.id)?.user_id
-      const myParticipation = participants?.find((p: any) => p.user_id === currentUser.id)
-
-      // Get other user's profile
-      let otherProfile: Profile | null = null
-      if (otherParticipantId) {
-        otherProfile = await getProfile(otherParticipantId)
-      }
+      const myLastRead = myLastReadAt[conv.id]
 
       // Get last message
       const { data: lastMessages } = await supabase
@@ -1032,15 +1184,20 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
 
       // Get unread count
       let unreadCount = 0
-      if (myParticipation) {
-        const { count } = await supabase
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('conversation_id', conv.id)
-          .gt('created_at', myParticipation.last_read_at)
-          .neq('sender_id', currentUser.id)
+      if (myLastRead) {
+        try {
+          const { count } = await supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('conversation_id', conv.id)
+            .gt('created_at', myLastRead)
+            .neq('sender_id', currentUser.id)
 
-        unreadCount = count || 0
+          unreadCount = count || 0
+        } catch {
+          // If messages RLS also fails, just show 0
+          unreadCount = 0
+        }
       }
 
       return {

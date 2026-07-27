@@ -13,6 +13,20 @@ const ChatList = () => {
   const location = useLocation()
   const [showNewChat, setShowNewChat] = useState(false)
 
+  // [DEBUG] Log every conversation's other_participant status
+  console.group('[ChatList] Debug: Conversations Data')
+  console.log('Total conversations loaded:', conversations.length)
+  conversations.forEach((conv, idx) => {
+    const participant = conv.other_participant
+    console.log(`[${idx}] Conv ID: ${conv.id} | other_participant:`, participant)
+    if (!participant) {
+      console.warn(`[ChatList] Conv ${idx}: other_participant is NULL! Keys present:`, Object.keys(conv))
+    } else {
+      console.log(`[ChatList] Conv ${idx}: Profile found - full_name: "${participant.full_name}", username: "${participant.username}"`)
+    }
+  })
+  console.groupEnd()
+
   const activeConversationId = location.pathname.split('/chat/')[1]
 
   const formatTime = (dateStr: string) => {
