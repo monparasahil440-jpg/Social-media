@@ -1,5 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { CallProvider } from './contexts/CallProvider'
+import GlobalCallOverlay from './components/GlobalCallOverlay'
 import Navbar from './components/Navbar'
 import LoadingSpinner from './components/LoadingSpinner'
 import Home from './pages/Home'
@@ -22,22 +24,26 @@ function App() {
   }
 
   return (
-      <HashRouter>      
+    <HashRouter>
+      <CallProvider>
         <div className="min-h-screen bg-gray-50">
-        {user && <Navbar />}
-<main>
-          <Routes>
-            <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
-            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
-            <Route path="/signup" element={!user ? <SignUp /> : <Navigate to="/" replace />} />
-            <Route path="/profile/:userId" element={user ? <Profile /> : <Navigate to="/login" replace />} />
-            <Route path="/explore" element={user ? <Explore /> : <Navigate to="/login" replace />} />
-            <Route path="/post/:postId" element={user ? <PostDetail /> : <Navigate to="/login" replace />} />
-            <Route path="/chat" element={user ? <Chat /> : <Navigate to="/login" replace />} />
-            <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" replace />} />
-          </Routes>
-        </main>
-      </div>
+          {user && <Navbar />}
+          <main>
+            <Routes>
+              <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
+              <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+              <Route path="/signup" element={!user ? <SignUp /> : <Navigate to="/" replace />} />
+              <Route path="/profile/:userId" element={user ? <Profile /> : <Navigate to="/login" replace />} />
+              <Route path="/explore" element={user ? <Explore /> : <Navigate to="/login" replace />} />
+              <Route path="/post/:postId" element={user ? <PostDetail /> : <Navigate to="/login" replace />} />
+              <Route path="/chat" element={user ? <Chat /> : <Navigate to="/login" replace />} />
+              <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" replace />} />
+            </Routes>
+          </main>
+          {/* Global Call Overlay (renders above everything via portal) */}
+          <GlobalCallOverlay />
+        </div>
+      </CallProvider>
     </HashRouter>
   )
 }

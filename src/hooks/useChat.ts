@@ -9,6 +9,8 @@ import {
   subscribeToConversationMessages,
   subscribeToConversationList,
   uploadImage,
+  hideConversation as hideConversationApi,
+  unhideConversation as unhideConversationApi,
 } from '../lib/supabaseClient'
 import type { Conversation, Message } from '../types'
 
@@ -75,12 +77,36 @@ export function useChat() {
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0)
 
+  const hideConversation = async (conversationId: string) => {
+    try {
+      await hideConversationApi(conversationId)
+      await loadConversations()
+    } catch (err: any) {
+      console.error('Error hiding conversation:', err)
+      setError(err.message || 'Failed to hide conversation')
+      throw err
+    }
+  }
+
+  const unhideConversation = async (conversationId: string) => {
+    try {
+      await unhideConversationApi(conversationId)
+      await loadConversations()
+    } catch (err: any) {
+      console.error('Error unhiding conversation:', err)
+      setError(err.message || 'Failed to unhide conversation')
+      throw err
+    }
+  }
+
   return {
     conversations,
     loading,
     error,
     totalUnread,
     startConversation,
+    hideConversation,
+    unhideConversation,
     refreshConversations: loadConversations,
   }
 }

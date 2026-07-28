@@ -1,12 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useConversationMessages } from '../../hooks/useChat'
-import { useCall } from '../../hooks/useCall'
-import { useAuth } from '../../hooks/useAuth'
+import { useCall } from '../../contexts/CallProvider'
 import Avatar from '../Avatar'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
-import CallUI from '../Call/CallUI'
 import LoadingSpinner from '../LoadingSpinner'
 import type { Conversation } from '../../types'
 
@@ -16,7 +14,6 @@ interface ChatWindowProps {
 }
 
 const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
-  const { user, profile } = useAuth()
   const navigate = useNavigate()
   const {
     messages,
@@ -26,47 +23,68 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
     sendImageMessage,
   } = useConversationMessages(conversation.id)
 
-  const {
-    callState,
-    startCall,
-    answerCall,
-    rejectCall,
-    endCall,
-    toggleMic,
-    toggleCamera,
-    toggleSpeaker,
-    switchCamera,
-  } = useCall()
+  const { startCall } = useCall()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [lastScrollHeight, setLastScrollHeight] = useState(0)
 
   const otherUser = conversation.other_participant
-  const isInCall = callState.status !== 'idle' && callState.status !== 'ended'
 
-  // [DEBUG] Log complete conversation object and participant details
-  console.group('[ChatWindow] Debug: Conversation Data')
-  console.log('Complete conversation object:', JSON.parse(JSON.stringify(conversation)))
-  console.log('Conversation ID:', conversation.id)
-  console.log('other_participant:', conversation.other_participant)
-  console.log('participants:', conversation.participants)
-  console.log('Current user ID:', user?.id)
-  console.log('Username fallback chain - full_name:', otherUser?.full_name, '| username:', otherUser?.username, '| avatar_url:', otherUser?.avatar_url)
-  if (!otherUser) {
-    console.warn('[ChatWindow] other_participant is NULL/UNDEFINED! This means the profile was not attached to the conversation object.')
-    console.warn('[ChatWindow] Conversation keys:', Object.keys(conversation))
-    console.warn('[ChatWindow] Conversation ID type:', typeof conversation.id)
-  } else {
-    console.log('[ChatWindow] Profile loaded successfully:', otherUser.full_name || otherUser.username)
-  }
-  console.groupEnd()
-
-  // Auto-scroll to bottom on new messages
+  
+  // Auto-scroll to bottom on new messages or initial load
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      // Hide scroll-to-bottom button when we scroll to bottom
+      setShowScrollToBottom(false)
     }
   }, [messages])
+
+  // Handle scroll events to show/hide scroll-to-bottom button
+  const handleScroll = useCallback(() => {
+    if (!containerRef.current) return
+
+    const scrollTop = containerRef.current.scrollTop
+    const scrollHeight = containerRef.current.scrollHeight
+    const clientHeight = containerRef.current.clientHeight
+
+    // Show scroll-to-bottom button if user is scrolled up more than 100px from bottom
+    if (scrollHeight - scrollTop - clientHeight > 100) {
+      setShowScrollToBottom(true)
+    } else {
+      setShowScrollToBottom(false)
+    }
+
+    setLastScrollHeight(scrollHeight)
+  }, [])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll)
+      return () => {
+        container.removeEventListener('scroll', handleScroll)
+      }
+    }
+  }, [handleScroll])
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      setShowScrollToBottom(false)
+    }
+  }
+
+  const scrollToTop = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      })
+    }
+  }
 
   const handleStartAudioCall = () => {
     if (otherUser && conversation.id) {
@@ -88,20 +106,6 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
 
   return (
     <div className="h-full flex flex-col bg-white">
-{/* Call UI Overlay */}
-      {isInCall && (
-        <CallUI
-          callState={callState}
-          onEndCall={endCall}
-          onToggleMic={toggleMic}
-          onToggleCamera={toggleCamera}
-          onToggleSpeaker={toggleSpeaker}
-          onSwitchCamera={switchCamera}
-          onAnswerCall={answerCall}
-          onRejectCall={rejectCall}
-        />
-      )}
-
       {/* Chat Header */}
       <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-3 bg-white shrink-0">
         {onBack && (
@@ -152,7 +156,7 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
       </div>
 
       {/* Messages Area */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50/50">
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50/50 relative">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <LoadingSpinner size="md" message="Loading messages..." />
@@ -172,6 +176,32 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
             ))}
             <div ref={messagesEndRef} />
           </>
+        )}
+
+        {/* Scroll to bottom button */}
+        {showScrollToBottom && (
+          <button
+            onClick={scrollToBottom}
+            className="fixed right-[50px] bottom-[150px] p-2 rounded-full bg-[#ffffff7d] backdrop-blur-sm shadow-lg hover:bg-white transition-all z-10 hover:scale-105"
+            aria-label="Scroll to bottom"
+          >
+            <svg className="w-6 h-6 text-gray-600 hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
+
+        {/* Scroll to top button */}
+        {!showScrollToBottom && lastScrollHeight > 200 && (
+          <button
+            onClick={scrollToTop}
+            className="fixed right-[50px] bottom-[180px] p-2 rounded-full bg-[#ffffff7d] backdrop-blur-sm shadow-lg hover:bg-white transition-all z-10 hover:scale-105"
+            aria-label="Scroll to top"
+          >
+            <svg className="w-6 h-6 text-gray-600 hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
         )}
       </div>
 

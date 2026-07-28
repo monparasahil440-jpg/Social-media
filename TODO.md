@@ -1,25 +1,24 @@
-# Notification Duplicate Fix Plan
+# Completed
 
-## Root Causes Identified
-1. **No UNIQUE constraint** on notifications table → DB allows duplicate rows
-2. **No deduplication in UI** → duplicates display as separate items
-3. **No debouncing on real-time callbacks** → rapid events cause redundant DB queries
-4. **React StrictMode** → double-mount effect can create duplicate subscriptions
+## 1. ✅ Fixed Infinite Recursion in `hideConversation` / `unhideConversation`
+**File:** `src/hooks/useChat.ts`
 
-## Steps
+Imported functions from `supabaseClient` are now aliased as `hideConversationApi` / `unhideConversationApi`
+to prevent shadowing recursion. The local wrapper functions now call the API functions instead of themselves.
 
-### Step 1: Database Migration - Prevent duplicates at DB level
-- File: `supabase/migrations/00012_fix_duplicate_notifications.sql`
-- Add a unique partial index on `(user_id, type, actor_id, post_id)` treating NULL post_id as a distinct value
-- Modify trigger functions to use `ON CONFLICT DO NOTHING` for graceful duplicate handling
-- Add a deduplication query to clean up existing duplicate notifications
+## 2. ✅ Fixed Ambiguous Column Reference in PostgreSQL RPC Functions
+**Files:** 
+- `src/lib/supabaseClient.ts` - RPC call param changed to `{ p_conversation_id }`
+- `supabase/migrations/00014_add_conversation_hiding.sql` - Parameter names changed to `p_conversation_id`
+- `supabase/migrations/00015_fix_hide_conversation_ambiguous_column.sql` - New fixup migration (run this!)
 
-### Step 2: Fix `subscribeToNotifications` in `supabaseClient.ts`
-- Add module-level registry to prevent duplicate real-time channels
-- Clean up stale channels before creating new ones
+## 3. ✅ Added Confirmation Popup Before Hide/Unhide
+**File:** `src/components/Chat/ChatList.tsx`
 
-### Step 3: Fix `NotificationBell.tsx` - UI deduplication & debouncing
-- Add deduplication using Map keyed on composite key
-- Debounce real-time callbacks (300ms)
-- Use refs to prevent stale subscription issues in StrictMode
+When user clicks the cross/eye icon, a confirmation dialog now appears:
+- **Hide:** Shows red-themed dialog asking "Hide conversation?" with user's name
+- **Unhide:** Shows green-themed dialog asking "Unhide conversation?" with user's name
+- Cancel button dismisses without action
+- Confirm button performs the actual hide/unhide operation
+- Dialog closes automatically after action completes
 

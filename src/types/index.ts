@@ -91,6 +91,7 @@ export interface Conversation {
   last_message?: Message
   other_participant?: Profile
   unread_count?: number
+  hidden_at?: string | null // Timestamp when user hid this conversation, null if not hidden
 }
 
 export interface ConversationParticipant {
@@ -125,9 +126,38 @@ export interface CallSignal {
   sender_id: string
   receiver_id: string
   signal_data: any
-  signal_type: 'offer' | 'answer' | 'ice-candidate'
+  signal_type: 'offer' | 'answer' | 'ice-candidate' | 'call-end' | 'reject'
   created_at: string
   // Joined fields
   sender?: Profile
+}
+
+// ============== CALL SESSION & RATING TYPES ==============
+
+export type CallSessionStatus = 'missed' | 'answered' | 'rejected' | 'cancelled' | 'failed'
+
+export interface CallSession {
+  id: string
+  conversation_id: string
+  caller_id: string
+  receiver_id: string
+  call_type: 'audio' | 'video'
+  status: CallSessionStatus
+  started_at: string
+  ended_at: string | null
+  duration: number
+  created_at: string
+  // Joined fields
+  caller?: Profile
+  receiver?: Profile
+}
+
+export interface CallRating {
+  id: string
+  call_session_id: string
+  user_id: string
+  rating: number
+  feedback: string | null
+  created_at: string
 }
 

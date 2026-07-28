@@ -1103,6 +1103,31 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
 }
 
 /**
+ * Delete a conversation and all associated data (messages, participants).
+ */
+export const deleteConversation = async (conversationId: string) => {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('User not authenticated')
+
+  try {
+    // Start a transaction-like approach by deleting in the right order
+    // 1. Delete messages first (foreign key constraint)
+    await supabase.from('messages').delete().eq('conversation_id', conversationId)
+
+    // 2. Delete conversation participants
+    await supabase.from('conversation_participants').delete().eq('conversation_id', conversationId)
+
+    // 3. Delete the conversation itself
+    const { error } = await supabase.from('conversations').delete().eq('id', conversationId)
+
+    if (error) throw error
+  } catch (error: any) {
+    console.error('Error deleting conversation:', error)
+    throw error
+  }
+}
+
+/**
  * Get all conversations for the current user with the last message and other participant profile.
  * Works even when conversation_participants RLS is broken (recursive policy).
  * Uses messages table as the primary source of conversation IDs as a fallback.
@@ -1111,36 +1136,56 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
   const currentUser = await getCurrentUser()
   if (!currentUser) return []
 
-  // ─── STEP 1: Get conversation IDs the user is part of ───
-  // Primary method: use conversation_participants (needs working RLS)
+  // ─── STEP 1: Get conversation IDs the user is part of (excluding hidden) ───
+  // Primary method: use conversation_participants (needs working RLS + hidden_at column)
   let conversationIds: string[] = []
 
   try {
     const { data: participations, error: partError } = await supabase
       .from('conversation_participants')
-      .select('conversation_id')
+      .select('conversation_id, hidden_at')
       .eq('user_id', currentUser.id)
+      .is('hidden_at', null)  // Only get non-hidden conversations
 
     if (partError) throw partError
     if (participations) {
-      conversationIds = participations.map(p => p.conversation_id)
+      conversationIds = participations
+        .filter(p => p.hidden_at === null) // Only include non-hidden conversations
+        .map(p => p.conversation_id)
     }
   } catch (err: any) {
-    // If RLS recursion (42P17) or any other error, fallback to messages table
-    console.warn('[getUserConversations] conversation_participants query failed, falling back to messages:', err?.code || err?.message)
-    try {
-      const { data: sentMessages } = await supabase
-        .from('messages')
-        .select('conversation_id')
-        .eq('sender_id', currentUser.id)
-        .order('created_at', { ascending: false })
+    // If the hidden_at column doesn't exist yet (42703 - migration 00014 not run)
+    // or RLS recursion (42P17), try a basic query without hidden_at first
+    console.warn('[getUserConversations] conversation_participants query with hidden_at failed:', err?.code || err?.message)
 
-      if (sentMessages) {
-        conversationIds = [...new Set(sentMessages.map(m => m.conversation_id))]
+    try {
+      // Try without hidden_at (column might not exist if migration 00014 hasn't been run)
+      const { data: basicParticipations, error: basicPartError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', currentUser.id)
+
+      if (basicPartError) throw basicPartError
+      if (basicParticipations) {
+        conversationIds = basicParticipations.map(p => p.conversation_id)
       }
-    } catch (msgErr: any) {
-      console.error('[getUserConversations] messages fallback also failed:', msgErr)
-      return []
+    } catch (basicErr: any) {
+      // If basic query also fails (RLS recursion etc), fallback to messages table
+      console.warn('[getUserConversations] basic conversation_participants query also failed, falling back to messages:', basicErr?.code || basicErr?.message)
+      try {
+        const { data: sentMessages } = await supabase
+          .from('messages')
+          .select('conversation_id')
+          .eq('sender_id', currentUser.id)
+          .order('created_at', { ascending: false })
+
+        if (sentMessages) {
+          conversationIds = [...new Set(sentMessages.map(m => m.conversation_id))]
+        }
+      } catch (msgErr: any) {
+        console.error('[getUserConversations] messages fallback also failed:', msgErr)
+        return []
+      }
     }
   }
 
@@ -1215,6 +1260,7 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
         other_participant: otherProfile,
         last_message: lastMessage,
         unread_count: unreadCount,
+        hidden_at: conv.hidden_at || null, // Map the hidden_at field
       } as Conversation
     })
   )
@@ -1415,6 +1461,44 @@ export const subscribeToConversationList = (
     })
 
   return { unsubscribe: () => supabase.removeChannel(supabase.channel(uniqueChannelName)) }
+}
+
+// ============== CONVERSATION HELPERS ==============
+
+export const removeUserFromConversation = async (conversationId: string, userId: string) => {
+  const { error } = await supabase
+    .from('conversation_participants')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+
+  if (error) throw error
+}
+
+/**
+ * Hide a conversation from the user's list (like Instagram's hide chat feature)
+ */
+export const hideConversation = async (conversationId: string): Promise<void> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .rpc('hide_conversation', { p_conversation_id: conversationId })
+
+  if (error) throw error
+}
+
+/**
+ * Unhide a conversation that was previously hidden
+ */
+export const unhideConversation = async (conversationId: string): Promise<void> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .rpc('unhide_conversation', { p_conversation_id: conversationId })
+
+  if (error) throw error
 }
 
 // ============== CALL SIGNALING HELPERS ==============

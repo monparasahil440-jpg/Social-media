@@ -6,26 +6,19 @@ import Avatar from '../Avatar'
 import NewChatModal from './NewChatModal'
 import type { Conversation } from '../../types'
 
+interface ConfirmDialogState {
+  show: boolean
+  conv: Conversation | null
+  action: 'hide' | 'unhide'
+}
+
 const ChatList = () => {
   const { user, profile } = useAuth()
-  const { conversations, loading, totalUnread, startConversation } = useChat()
+  const { conversations, loading, totalUnread, startConversation, hideConversation, unhideConversation } = useChat()
   const navigate = useNavigate()
   const location = useLocation()
   const [showNewChat, setShowNewChat] = useState(false)
-
-  // [DEBUG] Log every conversation's other_participant status
-  console.group('[ChatList] Debug: Conversations Data')
-  console.log('Total conversations loaded:', conversations.length)
-  conversations.forEach((conv, idx) => {
-    const participant = conv.other_participant
-    console.log(`[${idx}] Conv ID: ${conv.id} | other_participant:`, participant)
-    if (!participant) {
-      console.warn(`[ChatList] Conv ${idx}: other_participant is NULL! Keys present:`, Object.keys(conv))
-    } else {
-      console.log(`[ChatList] Conv ${idx}: Profile found - full_name: "${participant.full_name}", username: "${participant.username}"`)
-    }
-  })
-  console.groupEnd()
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ show: false, conv: null, action: 'hide' })
 
   const activeConversationId = location.pathname.split('/chat/')[1]
 
@@ -106,7 +99,7 @@ const ChatList = () => {
         ) : (
           <div className="divide-y divide-gray-50">
             {conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
                 onClick={() => navigate(`/chat/${conv.id}`)}
                 className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left ${
@@ -142,7 +135,37 @@ const ChatList = () => {
                     )}
                   </div>
                 </div>
-              </button>
+                {/* Hide/Unhide button */}
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setConfirmDialog({
+                        show: true,
+                        conv,
+                        action: conv.hidden_at ? 'unhide' : 'hide',
+                      })
+                    }}
+                    className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label={conv.hidden_at ? 'Unhide conversation' : 'Hide conversation'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {conv.hidden_at ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      )}
+                    </svg>
+                  </button>
+
+                  {/* Hidden indicator */}
+                  {conv.hidden_at && (
+                    <span className="absolute -right-2 -top-2 flex h-3 w-3 items-center justify-center text-xs font-bold rounded-full bg-red-500 text-white">
+                      •
+                    </span>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -154,6 +177,81 @@ const ChatList = () => {
           onSelect={handleStartConversation}
           onClose={() => setShowNewChat(false)}
         />
+      )}
+
+      {/* Confirmation Dialog */}
+      {confirmDialog.show && confirmDialog.conv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden">
+            {/* Dialog content */}
+            <div className="p-6 text-center">
+              {/* Icon */}
+              <div className={`w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center ${
+                confirmDialog.action === 'hide'
+                  ? 'bg-red-100'
+                  : 'bg-green-100'
+              }`}>
+                {confirmDialog.action === 'hide' ? (
+                  <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Title */}
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {confirmDialog.action === 'hide' ? 'Hide conversation?' : 'Unhide conversation?'}
+              </h3>
+
+              {/* Description */}
+              <p className="text-sm text-gray-500 mb-6">
+                {confirmDialog.action === 'hide'
+                  ? `This will hide the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} from your inbox. You can unhide it anytime from your settings.`
+                  : `This will restore the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} back to your inbox.`
+                }
+              </p>
+
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmDialog({ show: false, conv: null, action: 'hide' })}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    const c = confirmDialog.conv
+                    setConfirmDialog({ show: false, conv: null, action: 'hide' })
+                    if (c) {
+                      try {
+                        if (confirmDialog.action === 'hide') {
+                          await hideConversation(c.id)
+                        } else {
+                          await unhideConversation(c.id)
+                        }
+                      } catch {
+                        // Error already handled in useChat
+                      }
+                    }
+                  }}
+                  className={`flex-1 px-4 py-2.5 text-white text-sm font-medium rounded-xl transition-colors ${
+                    confirmDialog.action === 'hide'
+                      ? 'bg-red-500 hover:bg-red-600'
+                      : 'bg-green-500 hover:bg-green-600'
+                  }`}
+                >
+                  {confirmDialog.action === 'hide' ? 'Hide' : 'Unhide'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

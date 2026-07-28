@@ -8,7 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import type { Post } from '../types'
 
 const Home = () => {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -61,7 +61,7 @@ const Home = () => {
       {/* Welcome Section */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
-          Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}! 👋
+          Welcome back{profile?.username ? `, ${profile.username}` : user?.email ? `, ${user.email.split('@')[0]}` : ''}! 👋
         </h1>
         <p className="text-gray-500 mt-1">See what's happening in your world</p>
       </div>

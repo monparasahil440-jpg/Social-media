@@ -149,3 +149,18 @@ input:-webkit-autofill:focus {
 .animate-slide-up {
   animation: slideUp 0.3s ease-out;
 }
+
+/* Wave animation for active voice call */
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(2);
+  }
+}
+
+.animate-wave {
+  animation: wave 1.2s ease-in-out infinite;
+  transform-origin: bottom;
+}
