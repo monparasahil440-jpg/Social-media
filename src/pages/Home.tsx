@@ -6,6 +6,7 @@ import PostCard from '../components/PostCard'
 import CreatePost from '../components/CreatePost'
 import UserSearch from '../components/UserSearch'
 import LoadingSpinner from '../components/LoadingSpinner'
+import NotificationBell from '../components/NotificationBell'
 import type { Post } from '../types'
 
 const Home = () => {
@@ -64,6 +65,17 @@ const Home = () => {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
+      {/* Mobile Header - Instagram style */}
+      <div className="md:hidden flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">📱</span>
+          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            SocialMedia
+          </span>
+        </div>
+        <NotificationBell />
+      </div>
+
       {/* Welcome Section */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
@@ -129,7 +141,7 @@ const Home = () => {
       {/* Floating Action Button for Create Post */}
       <button
         onClick={() => setShowCreatePostModal(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 flex items-center justify-center z-40"
+        className="hidden md:flex fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 items-center justify-center z-40"
         title="Create Post"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -10,12 +10,33 @@ interface CallControlsProps {
   onEndCall: () => void
 }
 
-function ControlButton({ onClick, active, activeColor = 'bg-white/20', title, children }: {
-  onClick: () => void; active: boolean; activeColor?: string; title: string; children: React.ReactNode
+function ControlButton({ 
+  onClick, 
+  active, 
+  activeColor = 'bg-emerald-500',
+  title, 
+  children,
+  size = 'normal'
+}: {
+  onClick: () => void; 
+  active: boolean; 
+  activeColor?: string;
+  title: string; 
+  children: React.ReactNode;
+  size?: 'normal' | 'large';
 }) {
+  const sizeClasses = size === 'large' ? 'w-16 h-16' : 'w-14 h-14';
+  
   return (
-    <button onClick={onClick}
-      className={`p-4 rounded-full transition-all ${active ? `${activeColor} hover:${activeColor.replace('/20', '/30')}` : 'bg-red-500 hover:opacity-80'}`} title={title}>
+    <button 
+      onClick={onClick}
+      className={`${sizeClasses} rounded-full transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg flex items-center justify-center ${
+        active 
+          ? `${activeColor} text-white shadow-${activeColor.split('-')[1]}/50` 
+          : 'bg-gray-700/80 text-white/70 hover:bg-gray-600/80'
+      }`}
+      title={title}
+    >
       {children}
     </button>
   )
@@ -26,38 +47,66 @@ export default function CallControls({
   onToggleMic, onToggleCamera, onToggleSpeaker, onSwitchCamera, onEndCall,
 }: CallControlsProps) {
   return (
-    <div className="flex items-center justify-center gap-4">
-      <ControlButton onClick={onToggleMic} active={micEnabled} title={micEnabled ? 'Mute' : 'Unmute'}>
-        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="flex items-center justify-center gap-3 px-4">
+      <ControlButton 
+        onClick={onToggleMic} 
+        active={micEnabled} 
+        activeColor="bg-emerald-500"
+        title={micEnabled ? 'Mute' : 'Unmute'}
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           {!micEnabled && <line x1="4" y1="4" x2="20" y2="20" strokeLinecap="round" strokeWidth={2} />}
         </svg>
       </ControlButton>
-      <ControlButton onClick={onToggleSpeaker} active={speakerEnabled} activeColor="bg-indigo-500" title={speakerEnabled ? 'Speaker On' : 'Speaker Off'}>
-        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      
+      <ControlButton 
+        onClick={onToggleSpeaker} 
+        active={speakerEnabled} 
+        activeColor="bg-blue-500"
+        title={speakerEnabled ? 'Speaker On' : 'Speaker Off'}
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={speakerEnabled
             ? "M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
             : "M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"} />
         </svg>
       </ControlButton>
+      
       {isVideo && (
-        <ControlButton onClick={onToggleCamera} active={cameraEnabled} title={cameraEnabled ? 'Turn off camera' : 'Turn on camera'}>
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <ControlButton 
+          onClick={onToggleCamera} 
+          active={cameraEnabled} 
+          activeColor="bg-violet-500"
+          title={cameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {cameraEnabled
               ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />}
           </svg>
         </ControlButton>
       )}
+      
       {isVideo && cameraEnabled && (
-        <ControlButton onClick={onSwitchCamera} active={true} activeColor="bg-white/20" title="Switch camera">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <ControlButton 
+          onClick={onSwitchCamera} 
+          active={true} 
+          activeColor="bg-cyan-500"
+          title="Switch camera"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </ControlButton>
       )}
-      <button onClick={onEndCall} className="p-4 rounded-full bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg active:scale-95" title="End call">
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      
+      <button 
+        onClick={onEndCall} 
+        className="w-16 h-16 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30 transition-all duration-300 hover:scale-110 hover:bg-red-600 active:scale-95 flex items-center justify-center"
+        title="End call"
+      >
+        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.28 3H5z" />
         </svg>
       </button>

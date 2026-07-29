@@ -163,10 +163,10 @@ useEffect(() => {
         aria-label="Notifications"
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+        className="relative p-2 rounded-full border-2 border-transparent hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 transition-all duration-300 ease-in-out"
         title="Notifications"
       >
-        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"

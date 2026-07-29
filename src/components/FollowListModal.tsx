@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getFollowers, getFollowing, isFollowing, doesUserFollowMe, followUser, unfollowUser } from '../lib/supabaseClient'
+import { getFollowers, getFollowing, isFollowing, doesUserFollowMe, followUser, unfollowUser, followUserWithPrivacy, cancelFollowRequest, getPendingFollowRequest } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import Avatar from './Avatar'
 import LoadingSpinner from './LoadingSpinner'
@@ -14,7 +14,7 @@ interface FollowListModalProps {
 
 const FollowListModal = ({ userId, type, onClose }: FollowListModalProps) => {
   const { user: currentUser } = useAuth()
-  const [users, setUsers] = useState<(Profile & { iFollow?: boolean; followsMe?: boolean })[]>([])
+  const [users, setUsers] = useState<(Profile & { iFollow?: boolean; followsMe?: boolean; isRequested?: boolean })[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [followLoading, setFollowLoading] = useState<Record<string, boolean>>({})
 
@@ -33,11 +33,12 @@ const FollowListModal = ({ userId, type, onClose }: FollowListModalProps) => {
       if (currentUser) {
         const enhanced = await Promise.all(
           data.map(async (profile) => {
-            const [iFollow, followsMe] = await Promise.all([
+            const [iFollow, followsMe, pendingRequest] = await Promise.all([
               isFollowing(profile.id),
               doesUserFollowMe(profile.id),
+              getPendingFollowRequest(profile.id),
             ])
-            return { ...profile, iFollow, followsMe }
+            return { ...profile, iFollow, followsMe, isRequested: !!pendingRequest }
           })
         )
         setUsers(enhanced)
@@ -62,11 +63,22 @@ const FollowListModal = ({ userId, type, onClose }: FollowListModalProps) => {
         setUsers((prev) =>
           prev.map((u) => (u.id === targetUserId ? { ...u, iFollow: false } : u))
         )
-      } else {
-        await followUser(targetUserId)
+      } else if (user.isRequested) {
+        await cancelFollowRequest(targetUserId)
         setUsers((prev) =>
-          prev.map((u) => (u.id === targetUserId ? { ...u, iFollow: true } : u))
+          prev.map((u) => (u.id === targetUserId ? { ...u, isRequested: false } : u))
         )
+      } else {
+        const result = await followUserWithPrivacy(targetUserId)
+        if (result.type === 'requested') {
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUserId ? { ...u, isRequested: true } : u))
+          )
+        } else {
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUserId ? { ...u, iFollow: true } : u))
+          )
+        }
       }
     } catch (err) {
       console.error('Error toggling follow:', err)
@@ -155,13 +167,17 @@ const FollowListModal = ({ userId, type, onClose }: FollowListModalProps) => {
                     className={`shrink-0 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                       profile.iFollow
                         ? 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700'
+                        : profile.isRequested
+                          ? 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                          : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700'
                     }`}
                   >
                     {followLoading[profile.id] ? (
                       <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" />
                     ) : profile.iFollow ? (
                       'Following'
+                    ) : profile.isRequested ? (
+                      'Requested'
                     ) : (
                       'Follow'
                     )}

@@ -40,7 +40,7 @@ const ChatInput = ({ onSendText, onSendImage, onStartAudioCall, onStartVideoCall
 
   return (
     <div className="px-4 py-3 border-t border-gray-200 bg-white">
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         {/* Attachment Button */}
         <div className="flex items-center gap-1">
           <button
