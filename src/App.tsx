@@ -1,9 +1,13 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { CallProvider } from './contexts/CallProvider'
+import { ToastProvider } from './contexts/ToastProvider'
+import ToastContainer from './components/ToastContainer'
 import GlobalCallOverlay from './components/GlobalCallOverlay'
 import Navbar from './components/Navbar'
 import LoadingSpinner from './components/LoadingSpinner'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
@@ -11,9 +15,17 @@ import Profile from './pages/Profile'
 import Explore from './pages/Explore'
 import PostDetail from './pages/PostDetail'
 import Chat from './pages/Chat'
+import { requestNotificationPermission } from './utils/notification'
 
 function App() {
   const { user, loading } = useAuth()
+
+  // Request notification permission when user is logged in
+  useEffect(() => {
+    if (user) {
+      requestNotificationPermission()
+    }
+  }, [user])
 
   if (loading) {
     return (
@@ -25,25 +37,31 @@ function App() {
 
   return (
     <HashRouter>
-      <CallProvider>
-        <div className="min-h-screen bg-gray-50">
-          {user && <Navbar />}
-          <main>
-            <Routes>
-              <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
-              <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
-              <Route path="/signup" element={!user ? <SignUp /> : <Navigate to="/" replace />} />
-              <Route path="/profile/:userId" element={user ? <Profile /> : <Navigate to="/login" replace />} />
-              <Route path="/explore" element={user ? <Explore /> : <Navigate to="/login" replace />} />
-              <Route path="/post/:postId" element={user ? <PostDetail /> : <Navigate to="/login" replace />} />
-              <Route path="/chat" element={user ? <Chat /> : <Navigate to="/login" replace />} />
-              <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" replace />} />
-            </Routes>
-          </main>
-          {/* Global Call Overlay (renders above everything via portal) */}
-          <GlobalCallOverlay />
-        </div>
-      </CallProvider>
+      <ErrorBoundary>
+        <ToastProvider>
+          <CallProvider>
+            <div className="min-h-screen bg-gray-50">
+              {user && <Navbar />}
+              <main>
+                <Routes>
+                  <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
+                  <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+                  <Route path="/signup" element={!user ? <SignUp /> : <Navigate to="/" replace />} />
+                  <Route path="/profile/:userId" element={user ? <Profile /> : <Navigate to="/login" replace />} />
+                  <Route path="/explore" element={user ? <Explore /> : <Navigate to="/login" replace />} />
+                  <Route path="/post/:postId" element={user ? <PostDetail /> : <Navigate to="/login" replace />} />
+                  <Route path="/chat" element={user ? <Chat /> : <Navigate to="/login" replace />} />
+                  <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" replace />} />
+                </Routes>
+              </main>
+              {/* Global Toast Notifications */}
+              <ToastContainer />
+              {/* Global Call Overlay (renders above everything via portal) */}
+              <GlobalCallOverlay />
+            </div>
+          </CallProvider>
+        </ToastProvider>
+      </ErrorBoundary>
     </HashRouter>
   )
 }

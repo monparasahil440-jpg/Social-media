@@ -39,12 +39,20 @@ class WebRTCManager {
     onRemoteStream: (stream: MediaStream) => void,
     onConnectionState: (state: string) => void
   ): Promise<RTCPeerConnection> {
+    // Save pendingOffer before cleanup destroys it
+    const savedOffer = this.pendingOffer
+
     this.cleanup()
     this.localStream = localStream
     this.conversationId = conversationId
     this.otherUserId = otherUserId
     this.onRemoteStreamCallback = onRemoteStream
     this.onConnectionStateCallback = onConnectionState
+
+    // Restore the pending offer after cleanup
+    if (savedOffer) {
+      this.pendingOffer = savedOffer
+    }
 
     const configuration: RTCConfiguration = {
       iceServers: [
@@ -101,20 +109,32 @@ class WebRTCManager {
   }
 
   /**
-   * Handle an incoming offer
+   * Handle an incoming offer — stores it for later use
    */
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<void> {
     this.pendingOffer = offer
   }
 
   /**
-   * Create and send an answer (must call handleOffer first)
+   * Set a stored offer as the remote description on the current peer connection.
+   * This is used when initialize() was called after handleOffer() and wiped pendingOffer.
+   */
+  async setRemoteOffer(offer: RTCSessionDescriptionInit): Promise<void> {
+    const pc = this.peerConnection
+    if (!pc) throw new Error('Not initialized')
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer))
+  }
+
+  /**
+   * Create and send an answer (must call handleOffer or setRemoteOffer first)
    */
   async createAnswer(): Promise<void> {
     const pc = this.peerConnection
     if (!pc || !this.conversationId || !this.otherUserId) throw new Error('Not initialized')
 
-    if (this.pendingOffer) {
+    // If remote description hasn't been set yet, set it from pendingOffer
+    if (!pc.remoteDescription && this.pendingOffer) {
       await pc.setRemoteDescription(new RTCSessionDescription(this.pendingOffer))
       this.pendingOffer = null
     }
@@ -195,6 +215,13 @@ class WebRTCManager {
    */
   getRemoteStream(): MediaStream | null {
     return this.remoteStream
+  }
+
+  /**
+   * Get the stored pending offer (if any) without clearing it.
+   */
+  getPendingOffer(): RTCSessionDescriptionInit | null {
+    return this.pendingOffer
   }
 
   /**

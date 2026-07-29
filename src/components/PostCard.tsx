@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { likePost, unlikePost, isPostLiked, deletePost, getPostShareUrl, shareContent } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../contexts/ToastProvider'
 import CommentSection from './CommentSection'
 import Avatar from './Avatar'
+import { escapeHTML } from '../lib/sanitize'
 import type { Post } from '../types'
 
 interface PostCardProps {
@@ -14,6 +16,7 @@ interface PostCardProps {
 
 const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(post.likes_count || 0)
   const [showComments, setShowComments] = useState(false)
@@ -47,6 +50,7 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
       }
     } catch (err) {
       console.error('Error toggling like:', err)
+      showToast('Failed to like post', 'error')
     }
   }
 
@@ -54,8 +58,10 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
     try {
       await deletePost(post.id)
       onDelete?.(post.id)
+      showToast('Post deleted', 'success')
     } catch (err) {
       console.error('Error deleting post:', err)
+      showToast('Failed to delete post', 'error')
     }
     setShowMenu(false)
   }
@@ -126,11 +132,12 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
               </div>
             )}
           </div>
+        </div>
       </div>
 
       {/* Post Content */}
       <div className="p-4">
-        <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+        <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{escapeHTML(post.content)}</p>
 
         {post.image_url && !imageError && (
           <div className="mt-3 rounded-xl overflow-hidden bg-gray-50">
@@ -167,6 +174,7 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
       <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-6">
         <button
           onClick={handleLike}
+          aria-label={liked ? 'Unlike post' : 'Like post'}
           className={`flex items-center gap-1.5 text-sm transition-colors ${
             liked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
           }`}
@@ -189,6 +197,8 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
 
         <button
           onClick={() => setShowComments(!showComments)}
+          aria-label={showComments ? 'Hide comments' : 'Show comments'}
+          aria-expanded={showComments}
           className={`flex items-center gap-1.5 text-sm transition-colors ${
             showComments ? 'text-indigo-600' : 'text-gray-500 hover:text-indigo-600'
           }`}
@@ -210,6 +220,7 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
             const text = `Check out this post by ${profile?.full_name || profile?.username || 'someone'} on SocialMedia!`
             shareContent('Share Post', text, url)
           }}
+          aria-label="Share post"
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-600 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,8 +242,7 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
         </div>
       )}
     </div>
-    </div>
   )
 }
 
-export default PostCard
+export default memo(PostCard)

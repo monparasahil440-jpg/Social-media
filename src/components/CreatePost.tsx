@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { createPost, uploadImage } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import Avatar from './Avatar'
+import { escapeHTML } from '../lib/sanitize'
 
 interface CreatePostProps {
   onPostCreated?: (post: any) => void
@@ -85,6 +86,7 @@ const CreatePost = ({ onPostCreated }: CreatePostProps) => {
               placeholder="What's on your mind?"
               className="w-full resize-none border-0 focus:ring-0 text-gray-800 placeholder-gray-400 bg-transparent text-sm min-h-[80px] outline-none"
               rows={3}
+              maxLength={maxChars}
             />
 
             {/* Image Preview */}
@@ -114,6 +116,7 @@ const CreatePost = ({ onPostCreated }: CreatePostProps) => {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
+                  aria-label="Add image to post"
                   className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-indigo-600 transition-colors disabled:opacity-50"
                   title="Add image"
                 >

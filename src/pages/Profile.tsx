@@ -21,6 +21,7 @@ import {
 import PostCard from '../components/PostCard'
 import FollowListModal from '../components/FollowListModal'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { escapeHTML, sanitizeURL } from '../lib/sanitize'
 import type { Profile as ProfileType, Post } from '../types'
 
 const Profile = () => {
@@ -63,7 +64,7 @@ const Profile = () => {
     setIsLoading(true)
     setError('')
     try {
-      const [profileData, userPosts, followers, following, iFollowThemResult, theyFollowMeResult, blocked] = await Promise.all([
+      const [profileData, userPostsResult, followers, following, iFollowThemResult, theyFollowMeResult, blocked] = await Promise.all([
         getProfile(userId),
         getUserPosts(userId),
         getFollowersCount(userId),
@@ -80,7 +81,7 @@ const Profile = () => {
       }
 
       setProfile(profileData)
-      setPosts(userPosts)
+      setPosts(userPostsResult.posts)
       setFollowersCount(followers)
       setFollowingCount(following)
       setIFollowThem(iFollowThemResult)
@@ -485,16 +486,16 @@ const Profile = () => {
           ) : (
             <div className="mt-4 space-y-2">
               {profile.bio && (
-                <p className="text-gray-700 text-sm leading-relaxed">{profile.bio}</p>
+                <p className="text-gray-700 text-sm leading-relaxed">{escapeHTML(profile.bio)}</p>
               )}
               {profile.website && (
                 <a
-                  href={profile.website}
+                  href={sanitizeURL(profile.website)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
                 >
-                  🔗 {profile.website.replace(/^https?:\/\//, '')}
+                  🔗 {escapeHTML(profile.website.replace(/^https?:\/\//, ''))}
                 </a>
               )}
             </div>

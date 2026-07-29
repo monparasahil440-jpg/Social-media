@@ -7,6 +7,7 @@ import {
   markAllNotificationsRead,
   subscribeToNotifications,
 } from '../lib/supabaseClient'
+import { useToast } from '../contexts/ToastProvider'
 import Avatar from './Avatar'
 import type { Notification } from '../types'
 
@@ -15,6 +16,7 @@ const NotificationBell = () => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const { showToast } = useToast()
 
 useEffect(() => {
     loadNotifications()
@@ -27,6 +29,8 @@ useEffect(() => {
         // Reload notifications when a new one comes in
         loadNotifications()
         loadUnreadCount()
+        // Show a toast for the new notification
+        showToastForNotification(payload.new as Notification)
       })
     } catch (err) {
       // Silently handle if realtime is not available
@@ -82,6 +86,31 @@ useEffect(() => {
     setUnreadCount(0)
   }
 
+  const getToastMessage = (notification: Notification): string => {
+    const actorName = notification.actor?.full_name || notification.actor?.username || 'Someone'
+    switch (notification.type) {
+      case 'follow':
+        return `${actorName} started following you`
+      case 'follow_request':
+        return `${actorName} wants to follow you`
+      case 'follow_accept':
+        return `${actorName} accepted your follow request`
+      case 'like':
+        return `${actorName} liked your post`
+      case 'comment':
+        return `${actorName} commented on your post`
+      case 'mention':
+        return `${actorName} mentioned you`
+      default:
+        return 'New notification'
+    }
+  }
+
+  const showToastForNotification = (notification: Notification) => {
+    const message = getToastMessage(notification)
+    showToast(message, 'info', 5000)
+  }
+
   const getNotificationText = (notification: Notification): { text: string; link: string } => {
     const actorName = notification.actor?.full_name || notification.actor?.username || 'Someone'
     switch (notification.type) {
@@ -123,8 +152,17 @@ useEffect(() => {
       <button
         onClick={() => {
           setIsOpen(!isOpen)
-          if (!isOpen) loadNotifications()
+          if (!isOpen) {
+            loadNotifications()
+            // Mark all as read when opening notifications
+            if (unreadCount > 0) {
+              handleMarkAllRead()
+            }
+          }
         }}
+        aria-label="Notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
         className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
         title="Notifications"
       >

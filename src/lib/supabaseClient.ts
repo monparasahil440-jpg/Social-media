@@ -4,8 +4,27 @@ import type { Profile, Post, Comment, Notification, FollowRequest, Block, Conver
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env file.')
+}
+
+// Validate Supabase URL format
+try {
+  const url = new URL(supabaseUrl)
+  if (!url.protocol.startsWith('https')) {
+    throw new Error('Supabase URL must use HTTPS protocol')
+  }
+  if (!url.hostname.includes('.supabase.co')) {
+    console.warn('Warning: Supabase URL does not appear to be a valid Supabase project URL')
+  }
+} catch (error) {
+  throw new Error(`Invalid Supabase URL format: ${error}`)
+}
+
+// Validate anon key format (basic check for JWT-like structure)
+if (supabaseAnonKey.length < 20) {
+  throw new Error('Supabase anon key appears to be invalid (too short)')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -156,10 +175,13 @@ export const getPosts = async (limit = 20, offset = 0) => {
 
   if (error) throw error
 
-  return attachProfilesToPosts(posts || [])
+  return {
+    posts: await attachProfilesToPosts(posts || []),
+    hasMore: (posts || []).length === limit,
+  }
 }
 
-export const getUserPosts = async (userId: string) => {
+export const getUserPosts = async (userId: string, limit = 20, offset = 0) => {
   const { data, error } = await supabase
     .from('posts')
     .select(`
@@ -169,13 +191,17 @@ export const getUserPosts = async (userId: string) => {
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) throw error
 
-  return attachProfilesToPosts(data || [])
+  return {
+    posts: await attachProfilesToPosts(data || []),
+    hasMore: (data || []).length === limit,
+  }
 }
 
-export const getFeedPosts = async (userId: string, limit = 20) => {
+export const getFeedPosts = async (userId: string, limit = 20, offset = 0) => {
   // Get posts from users the current user follows + own posts
   const { data: following } = await supabase
     .from('follows')
@@ -194,11 +220,14 @@ export const getFeedPosts = async (userId: string, limit = 20) => {
     `)
     .in('user_id', followingIds)
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   if (error) throw error
 
-  return attachProfilesToPosts(data || [])
+  return {
+    posts: await attachProfilesToPosts(data || []),
+    hasMore: (data || []).length === limit,
+  }
 }
 
 export const createPost = async (content: string, imageUrl?: string) => {
@@ -1599,12 +1628,18 @@ export const sendCallEndSignal = async (
 /**
  * Save a call event message (answered/missed call) to the conversation.
  * This shows up in the chat like Instagram's call history.
+ * @param conversationId - The conversation ID
+ * @param callType - 'audio' or 'video'
+ * @param callDuration - Duration in seconds (null for missed calls)
+ * @param wasAnswered - Whether the call was answered
+ * @param callerId - The ID of the user who initiated the call (this will be the message sender)
  */
 export const createCallMessage = async (
   conversationId: string,
   callType: 'audio' | 'video',
   callDuration: number | null,
-  wasAnswered: boolean
+  wasAnswered: boolean,
+  callerId: string
 ): Promise<Message> => {
   const currentUser = await getCurrentUser()
   if (!currentUser) throw new Error('User not authenticated')
@@ -1622,7 +1657,7 @@ export const createCallMessage = async (
     .from('messages')
     .insert({
       conversation_id: conversationId,
-      sender_id: currentUser.id,
+      sender_id: callerId,
       content,
       message_type: 'call',
       call_type: callType,
@@ -1634,6 +1669,6 @@ export const createCallMessage = async (
 
   if (error) throw error
 
-  const profile = await getProfile(currentUser.id)
+  const profile = await getProfile(callerId)
   return { ...data, sender: profile } as Message
 }

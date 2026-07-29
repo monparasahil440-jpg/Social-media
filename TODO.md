@@ -1,24 +1,20 @@
-# Completed
+# Call System Bug Fixes
 
-## 1. ✅ Fixed Infinite Recursion in `hideConversation` / `unhideConversation`
-**File:** `src/hooks/useChat.ts`
+## Issues Fixed
+- [x] Plan approved
 
-Imported functions from `supabaseClient` are now aliased as `hideConversationApi` / `unhideConversationApi`
-to prevent shadowing recursion. The local wrapper functions now call the API functions instead of themselves.
+## Fix 1: WebRTC Race Condition on Answer Call
+- [ ] Add `pendingOfferRef` in CallProvider.tsx to store incoming offer SDP
+- [ ] Store offer in ref inside signal subscription handler
+- [ ] Add `setRemoteOffer()` method to WebRTCManager.ts
+- [ ] Fix `answerCall()` in CallProvider.tsx to restore offer after initialize() clears it
 
-## 2. ✅ Fixed Ambiguous Column Reference in PostgreSQL RPC Functions
-**Files:** 
-- `src/lib/supabaseClient.ts` - RPC call param changed to `{ p_conversation_id }`
-- `supabase/migrations/00014_add_conversation_hiding.sql` - Parameter names changed to `p_conversation_id`
-- `supabase/migrations/00015_fix_hide_conversation_ambiguous_column.sql` - New fixup migration (run this!)
+## Fix 2: Realtime Notification Channel CLOSED
+- [ ] Fix NotificationBell.tsx channel subscription to handle StrictMode double-mounting
 
-## 3. ✅ Added Confirmation Popup Before Hide/Unhide
-**File:** `src/components/Chat/ChatList.tsx`
+## Fix 3: `call_sessions` table migration
+- [ ] User action: Run 00013_call_sessions.sql in Supabase SQL editor
 
-When user clicks the cross/eye icon, a confirmation dialog now appears:
-- **Hide:** Shows red-themed dialog asking "Hide conversation?" with user's name
-- **Unhide:** Shows green-themed dialog asking "Unhide conversation?" with user's name
-- Cancel button dismisses without action
-- Confirm button performs the actual hide/unhide operation
-- Dialog closes automatically after action completes
+## Fix 4: Status state timing in answerCall
+- [ ] Move `setCallState({status:'connected'})` after WebRTC operations complete
 

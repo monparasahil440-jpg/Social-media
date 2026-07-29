@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { getUnreadConversationCount } from '../lib/supabaseClient'
+import { getUnreadConversationCount, subscribeToConversationList } from '../lib/supabaseClient'
 import NotificationBell from './NotificationBell'
 import Avatar from './Avatar'
 
@@ -15,6 +15,15 @@ const Navbar = () => {
   useEffect(() => {
     if (user) {
       loadUnreadCount()
+
+      // Subscribe to conversation updates for realtime unread count
+      const sub = subscribeToConversationList(user.id, () => {
+        loadUnreadCount()
+      })
+
+      return () => {
+        sub.unsubscribe()
+      }
     }
   }, [user])
 
@@ -35,7 +44,7 @@ const Navbar = () => {
   const navLinks = [
     { path: '/', label: 'Home', icon: '🏠' },
     { path: '/explore', label: 'Explore', icon: '🔍' },
-    { path: '/chat', label: 'Messages', icon: '💬', badge: unreadMessages },
+    { path: '/chat', label: 'Messages', icon: '💬', badge: unreadMessages > 0 ? unreadMessages : undefined },
     { path: `/profile/${user?.id}`, label: 'Profile', icon: '👤' },
   ]
 
@@ -64,7 +73,7 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive(link.path)
                     ? 'bg-indigo-50 text-indigo-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -72,6 +81,11 @@ const Navbar = () => {
               >
                 <span className="mr-1.5">{link.icon}</span>
                 {link.label}
+                {link.badge && link.badge > 0 && (
+                  <span className="message-counter absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    {link.badge > 99 ? '99+' : link.badge}
+                  </span>
+                )}
               </Link>
             ))}
 
@@ -109,6 +123,8 @@ const Navbar = () => {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
               className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
             >
               {mobileMenuOpen ? (
@@ -134,7 +150,7 @@ const Navbar = () => {
                 key={link.path}
                 to={link.path}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(link.path)
                     ? 'bg-indigo-50 text-indigo-700'
                     : 'text-gray-600 hover:bg-gray-50'
@@ -142,6 +158,11 @@ const Navbar = () => {
               >
                 <span className="mr-2">{link.icon}</span>
                 {link.label}
+                {link.badge && link.badge > 0 && (
+                  <span className="message-counter absolute top-2 right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    {link.badge > 99 ? '99+' : link.badge}
+                  </span>
+                )}
               </Link>
             ))}
             <div className="border-t border-gray-100 pt-3 mt-3">

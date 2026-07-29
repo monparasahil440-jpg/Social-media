@@ -7,9 +7,9 @@ import RatingDialog from './RatingDialog'
 
 export default function CallUI() {
   const {
-    callState, answerCall, rejectCall, endCall, dismissSummary,
+    callState, startCall, answerCall, rejectCall, endCall, dismissSummary,
     toggleMic, toggleCamera, toggleSpeaker, switchCamera,
-    openRating, closeRating, showRating,
+    openRating, closeRating, showRating, submitRating,
   } = useCall()
 
   const { status, type, otherUserProfile, callDuration, micEnabled, cameraEnabled, speakerEnabled, summaryData } = callState
@@ -64,17 +64,25 @@ export default function CallUI() {
           callType={summaryData.callType}
           otherUserProfile={summaryData.otherUserProfile}
           currentUserProfile={summaryData.currentUserProfile}
+          conversationId={summaryData.conversationId}
+          otherUserId={summaryData.otherUserId}
           onDone={dismissSummary}
-          onMessage={dismissSummary}
-          onCallAgain={() => {
+          onMessage={(conversationId, otherUserId) => {
             dismissSummary()
-            // startCall can be called from elsewhere
+            // Navigate to chat with this conversation
+            window.location.hash = `/chat/${conversationId}`
+          }}
+          onCallAgain={(conversationId, otherUserId, otherUserProfile, callType) => {
+            dismissSummary()
+            if (conversationId && otherUserId && otherUserProfile) {
+              startCall(conversationId, otherUserId, otherUserProfile, callType)
+            }
           }}
         />
         {showRating && (
           <RatingDialog
-            onSubmit={(rating, feedback) => {
-              console.log('Rating submitted:', rating, feedback)
+            onSubmit={async (rating, feedback) => {
+              await submitRating(rating, feedback)
               closeRating()
             }}
             onSkip={closeRating}

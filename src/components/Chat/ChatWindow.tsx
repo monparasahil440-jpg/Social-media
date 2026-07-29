@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useConversationMessages } from '../../hooks/useChat'
 import { useCall } from '../../contexts/CallProvider'
@@ -32,15 +32,34 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
 
   const otherUser = conversation.other_participant
 
-  
-  // Auto-scroll to bottom on new messages or initial load
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
-      // Hide scroll-to-bottom button when we scroll to bottom
-      setShowScrollToBottom(false)
+  const scrollToBottom = useCallback(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
-  }, [messages])
+  }, [])
+
+  // Scroll to bottom when loading completes or conversation changes
+  useEffect(() => {
+    const doScroll = () => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight
+      }
+    }
+
+    if (!loading) {
+      doScroll()
+      // Try multiple times with delays
+      setTimeout(doScroll, 50)
+      setTimeout(doScroll, 150)
+    }
+  }, [loading, conversation.id])
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > 0 && !loading) {
+      scrollToBottom()
+    }
+  }, [messages, loading, scrollToBottom])
 
   // Handle scroll events to show/hide scroll-to-bottom button
   const handleScroll = useCallback(() => {
@@ -69,13 +88,6 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
       }
     }
   }, [handleScroll])
-
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
-      setShowScrollToBottom(false)
-    }
-  }
 
   const scrollToTop = () => {
     if (containerRef.current) {

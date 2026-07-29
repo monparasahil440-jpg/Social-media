@@ -6,10 +6,12 @@
  */
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { sendCallSignal, subscribeToCallSignals, sendCallEndSignal, getProfile } from '../lib/supabaseClient'
+import { sendCallSignal, subscribeToCallSignals, sendCallEndSignal, getProfile, createCallMessage } from '../lib/supabaseClient'
 import { webRTCManager } from '../services/WebRTCManager'
 import { audioService } from '../services/AudioService'
-import { createCallSession, updateCallSession } from '../services/CallService'
+import { createCallSession, updateCallSession, submitCallRating } from '../services/CallService'
+import { useToast } from './ToastProvider'
+import { showNotification } from '../utils/notification'
 import type { Profile, CallSignal } from '../types'
 
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'ended' | 'summary' | 'rating'
@@ -28,13 +30,15 @@ export interface CallState {
   speakerEnabled: boolean
   sessionId: string | null
   // Summary screen
-  summaryData: {
-    duration: number
-    endedAt: string
-    callType: CallType
-    otherUserProfile: Profile | null
-    currentUserProfile: Profile | undefined
-  } | null
+    summaryData: {
+      duration: number
+      endedAt: string
+      callType: CallType
+      otherUserProfile: Profile | null
+      currentUserProfile: Profile | undefined
+      conversationId: string | null
+      otherUserId: string | null
+    } | null
 }
 
 interface CallContextType {
@@ -51,6 +55,7 @@ interface CallContextType {
   openRating: () => void
   closeRating: () => void
   showRating: boolean
+  submitRating: (rating: number, feedback?: string) => Promise<void>
 }
 
 const defaultCallState: CallState = {
@@ -72,6 +77,7 @@ const CallContext = createContext<CallContextType | undefined>(undefined)
 
 export function CallProvider({ children }: { children: ReactNode }) {
   const { user, profile: currentUserProfile } = useAuth()
+  const { showToast } = useToast()
   const [callState, setCallState] = useState<CallState>(defaultCallState)
   const [showRating, setShowRating] = useState(false)
 
@@ -80,6 +86,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const durationIntervalRef = useRef<number | null>(null)
   const isEndingRef = useRef(false)
   const startTimeRef = useRef<number | null>(null)
+  // Store the incoming offer SDP so it survives WebRTCManager.initialize() cleanup cycle
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null)
 
   callStateRef.current = callState
 
@@ -97,13 +105,23 @@ export function CallProvider({ children }: { children: ReactNode }) {
     startTimeRef.current = null
   }, [])
 
-  const startDurationTimer = useCallback(() => {
+const startDurationTimer = useCallback(() => {
+    if (durationIntervalRef.current) return
+
     startTimeRef.current = Date.now()
+
     durationIntervalRef.current = window.setInterval(() => {
-      const elapsed = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0
-      setCallState(prev => ({ ...prev, callDuration: elapsed }))
+        const elapsed =
+            startTimeRef.current
+                ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+                : 0
+
+        setCallState(prev => ({
+            ...prev,
+            callDuration: elapsed,
+        }))
     }, 1000)
-  }, [])
+}, [])
 
   const setNavbarVisibility = (visible: boolean) => {
     const nav = document.querySelector('nav')
@@ -161,13 +179,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
         stream,
         conversationId,
         otherUserId,
-        (remoteStream) => {
+              () => {
           setCallState(prev => ({
             ...prev,
             status: 'connected',
-            remoteStream: remoteStream ? true : prev.status === 'connected',
           }))
-          // @ts-ignore - we track stream via ref
+
           audioService.stopAll()
           startDurationTimer()
         },
@@ -204,6 +221,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints)
 
+      // Save the pending offer before initialize() -> cleanup() wipes it
+      const savedOffer = pendingOfferRef.current
+
       // Update call session
       if (callStateRef.current.sessionId) {
         try {
@@ -214,8 +234,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
           console.error('Failed to update call session:', err)
         }
       }
-
-      setCallState(prev => ({ ...prev, status: 'connected' }))
 
       await webRTCManager.initialize(
         stream,
@@ -231,8 +249,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
       )
 
+      // If we had a stored offer, set it as the remote description on the new PC
+      // before creating the answer. This prevents the InvalidStateError from
+      // createAnswer() being called without a remote offer.
+      if (savedOffer && !webRTCManager.getPendingOffer()) {
+        await webRTCManager.setRemoteOffer(savedOffer)
+      }
+
+      // Now the PC is in have-remote-offer state — createAnswer() will succeed
       await webRTCManager.createAnswer()
-      startDurationTimer()
+
+      // Set status to connected only AFTER WebRTC operations succeed
+      setCallState(prev => ({ ...prev, status: 'connected' }))
     } catch (err) {
       console.error('Error answering call:', err)
       cleanupCall()
@@ -254,6 +282,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
       try {
         await updateCallSession(sessionId, { status: 'rejected', ended_at: new Date().toISOString() })
       } catch {}
+    }
+
+    // Create missed call message in chat (caller is the one who initiated the call)
+    if (conversationId && type && otherUserId) {
+      try {
+        await createCallMessage(conversationId, type, null, false, otherUserId)
+      } catch (err) {
+        console.error('Failed to create call message:', err)
+      }
     }
 
     audioService.stopAll()
@@ -292,8 +329,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
     audioService.playEndSound()
     cleanupCall()
 
+    // Create call message in chat (caller is always the one who initiated)
+    if (conversationId) {
+      try {
+        await createCallMessage(conversationId, type, wasConnected ? callDuration : null, wasConnected, user?.id || '')
+      } catch (err) {
+        console.error('Failed to create call message:', err)
+      }
+    }
+
     // Build summary data
     const otherProfile = callStateRef.current.otherUserProfile
+    const currentConversationId = callStateRef.current.conversationId
+    const currentOtherUserId = callStateRef.current.otherUserId
+
     setCallState(prev => ({
       ...prev,
       status: 'summary',
@@ -301,27 +350,43 @@ export function CallProvider({ children }: { children: ReactNode }) {
         duration: callDuration,
         endedAt: new Date().toLocaleTimeString(),
         callType: type,
-        otherUserProfile: otherProfile,
-        currentUserProfile: currentUserProfile,
+        otherUserProfile: otherProfile ?? null,
+        currentUserProfile: currentUserProfile ?? undefined,
+        conversationId: currentConversationId,
+        otherUserId: currentOtherUserId,
       },
     }))
+
+    // Auto-show rating dialog for connected calls
+    if (wasConnected) {
+      setTimeout(() => setShowRating(true), 500)
+    }
 
     setTimeout(() => {
       isEndingRef.current = false
     }, 1000)
   }, [cleanupCall, currentUserProfile])
 
-  const dismissSummary = useCallback(() => {
-    setCallState(prev => ({
-      ...prev,
-      status: 'idle',
-      summaryData: null,
-    }))
-    setNavbarVisibility(true)
-  }, [])
+    const dismissSummary = useCallback(() => {
+      setCallState(defaultCallState)
+      setNavbarVisibility(true)
+    }, [])
 
   const openRating = useCallback(() => setShowRating(true), [])
   const closeRating = useCallback(() => setShowRating(false), [])
+
+  const submitRating = useCallback(async (rating: number, feedback?: string) => {
+    const { sessionId } = callStateRef.current
+    if (!sessionId || !user) return
+
+    try {
+      await submitCallRating(sessionId, user.id, rating, feedback)
+      showToast('Rating submitted successfully', 'success')
+    } catch (err) {
+      console.error('Failed to submit rating:', err)
+      showToast('Failed to submit rating', 'error')
+    }
+  }, [user, showToast])
 
   // Toggle mic
   const toggleMic = useCallback(() => {
@@ -372,6 +437,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const handleSignal = async (signal: CallSignal) => {
       // Detect and handle reject signal
       if (signal.signal_data?.type === 'reject') {
+        const { conversationId, type } = callStateRef.current
+
+        // Create missed call message in chat (caller is the other user who initiated)
+        if (conversationId && type) {
+          try {
+            await createCallMessage(conversationId, type, null, false, signal.sender_id)
+          } catch (err) {
+            console.error('Failed to create call message:', err)
+          }
+        }
+
         audioService.stopAll()
         cleanupCall()
         setCallState(prev => {
@@ -384,11 +460,28 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return prev
         })
         setNavbarVisibility(true)
+        showToast('Call was rejected', 'warning')
         return
       }
 
       // Detect call-end signal
       if (signal.signal_data?.type === 'call-end') {
+        const { conversationId, type, callDuration, status } = callStateRef.current
+        const wasConnected = status === 'connected'
+
+        // Create call message in chat (caller is the one who initiated the call)
+        if (conversationId && type) {
+          try {
+            // For incoming calls, the caller is the other user; for outgoing, it's the current user
+            const callerId = callStateRef.current.incoming ? callStateRef.current.otherUserId : user?.id
+            if (callerId) {
+              await createCallMessage(conversationId, type, wasConnected ? callDuration : null, wasConnected, callerId)
+            }
+          } catch (err) {
+            console.error('Failed to create call message:', err)
+          }
+        }
+
         audioService.stopAll()
         cleanupCall()
         setNavbarVisibility(true)
@@ -397,16 +490,23 @@ export function CallProvider({ children }: { children: ReactNode }) {
           status: 'idle',
           summaryData: null,
         }))
+        showToast('Call ended', 'info')
         return
       }
 
       switch (signal.signal_type) {
         case 'offer': {
           // Skip our own signals
-          if (signal.sender_id === user.id) return
+          if (
+            callStateRef.current.status !== 'idle' &&
+            callStateRef.current.status !== 'ended'
+          ) {
+            console.log('User already in another call')
+            return
+          }
 
           // Get sender profile if not attached
-          let senderProfile = signal.sender
+          let senderProfile: Profile | null = signal.sender ?? null
           if (!senderProfile) {
             try { senderProfile = await getProfile(signal.sender_id) } catch {}
           }
@@ -416,6 +516,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
           // Play incoming ringtone
           audioService.playIncomingRingtone()
+
+          // Show browser notification for incoming call
+          const callerName = senderProfile?.full_name || senderProfile?.username || 'Someone'
+          showNotification({
+            title: `${isVideo ? '📹 Video' : '📞 Audio'} call from ${callerName}`,
+            body: 'Tap to answer',
+            onClick: () => {
+              window.focus()
+            },
+          })
 
           // Create a session for incoming call
           let sessionId: string | null = null
@@ -431,8 +541,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
             console.error('Failed to create session for incoming call:', err)
           }
 
-          // Store offer in WebRTC manager
+          // Store offer in WebRTC manager AND in ref for answerCall() to use
           await webRTCManager.handleOffer(signal.signal_data)
+          pendingOfferRef.current = signal.signal_data
 
           setCallState(prev => {
             if (prev.status !== 'idle' && prev.status !== 'ended') return prev
@@ -495,6 +606,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         openRating,
         closeRating,
         showRating,
+        submitRating,
       }}
     >
       {children}

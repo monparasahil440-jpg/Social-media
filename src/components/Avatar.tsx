@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 
 interface AvatarProps {
   src?: string | null
@@ -36,5 +36,5 @@ const Avatar = ({ src, name, size = 'w-10 h-10', className = '' }: AvatarProps) 
   )
 }
 
-export default Avatar
+export default memo(Avatar)
 

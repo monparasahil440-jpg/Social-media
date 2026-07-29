@@ -12,10 +12,13 @@ import {
   hideConversation as hideConversationApi,
   unhideConversation as unhideConversationApi,
 } from '../lib/supabaseClient'
+import { useToast } from '../contexts/ToastProvider'
+import { showNotification } from '../utils/notification'
 import type { Conversation, Message } from '../types'
 
 export function useChat() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +65,10 @@ export function useChat() {
       subscriptionsRef.current = []
     }
   }, [user, loadConversations])
+
+  const showMessageSentToast = () => {
+    showToast('Message sent', 'success', 2000)
+  }
 
   const startConversation = async (otherUserId: string): Promise<Conversation | null> => {
     try {
@@ -156,6 +163,19 @@ export function useConversationMessages(conversationId: string | null) {
 
     const sub = subscribeToConversationMessages(conversationId, (message: Message) => {
       setMessages(prev => [...prev, message])
+      
+      // Show notification for incoming messages from other users
+      if (message.sender_id !== user.id) {
+        const senderName = message.sender?.full_name || message.sender?.username || 'Someone'
+        showNotification({
+          title: `New message from ${senderName}`,
+          body: message.message_type === 'image' ? '📷 Photo' : message.content,
+          onClick: () => {
+            window.location.hash = `/chat/${conversationId}`
+          },
+        })
+      }
+      
       // Mark as read when new message arrives
       markConversationRead(conversationId).catch(console.error)
     })
