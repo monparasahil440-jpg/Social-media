@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react'
 import { Link } from 'react-router-dom'
-import { likePost, unlikePost, isPostLiked, deletePost, getPostShareUrl, shareContent } from '../lib/supabaseClient'
+import { likePost, unlikePost, isPostLiked, deletePost, getPostShareUrl, shareContent, isFollowing, followUserWithPrivacy, getPendingFollowRequest } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../contexts/ToastProvider'
 import CommentSection from './CommentSection'
@@ -23,12 +23,19 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
   const [showMenu, setShowMenu] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [isFollowingUser, setIsFollowingUser] = useState(false)
+  const [hasPendingRequest, setHasPendingRequest] = useState(false)
 
   useEffect(() => {
     if (user) {
       isPostLiked(post.id).then(setLiked).catch(console.error)
+      // Check if current user follows the post author
+      if (post.user_id !== user.id) {
+        isFollowing(post.user_id).then(setIsFollowingUser).catch(console.error)
+        getPendingFollowRequest(post.user_id).then(req => setHasPendingRequest(!!req)).catch(console.error)
+      }
     }
-  }, [post.id, user])
+  }, [post.id, post.user_id, user])
 
   useEffect(() => {
     setLikeCount(post.likes_count || 0)
@@ -66,6 +73,23 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
     setShowMenu(false)
   }
 
+  const handleFollow = async () => {
+    if (!user) return
+    try {
+      const result = await followUserWithPrivacy(post.user_id)
+      if (result.type === 'requested') {
+        setHasPendingRequest(true)
+        showToast('Follow request sent!', 'success')
+      } else {
+        setIsFollowingUser(true)
+        showToast('You are now following this user', 'success')
+      }
+    } catch (err) {
+      console.error('Error following user:', err)
+      showToast('Failed to follow user', 'error')
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
@@ -83,6 +107,8 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
 
   const profile = post.profiles
   const isOwner = user?.id === post.user_id
+  const isPrivateAccount = profile?.is_private || false
+  const shouldShowFollowButton = !isOwner && user && !isFollowingUser && !hasPendingRequest && isPrivateAccount
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow duration-200">
@@ -105,6 +131,19 @@ const PostCard = ({ post, onDelete, onLikeChange }: PostCardProps) => {
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            {shouldShowFollowButton && (
+              <button
+                onClick={handleFollow}
+                className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 transition-colors"
+              >
+                Follow
+              </button>
+            )}
+            {hasPendingRequest && (
+              <span className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                Requested
+              </span>
+            )}
             <span className="text-xs text-gray-400">{formatDate(post.created_at)}</span>
             {isOwner && (
               <div className="relative">

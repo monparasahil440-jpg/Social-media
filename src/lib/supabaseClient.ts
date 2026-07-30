@@ -163,25 +163,98 @@ const attachProfilesToPosts = async (posts: any[]): Promise<Post[]> => {
 }
 
 export const getPosts = async (limit = 20, offset = 0) => {
+  const user = await getCurrentUser()
+  
+  // If user is authenticated, get posts excluding private accounts they don't follow
+  if (user) {
+    // Get users the current user follows
+    const { data: following } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id)
+
+    const followingIds = following?.map(f => f.following_id) || []
+    followingIds.push(user.id) // Include own posts
+
+    // Get posts from public accounts OR from private accounts the user follows
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        likes_count:likes(count),
+        comments_count:comments(count),
+        profiles!posts_user_id_fkey(id, is_private)
+      `)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (error) throw error
+
+    // Filter posts: show if public OR if user follows the author
+    const filteredPosts = (posts || []).filter((post: any) => {
+      const isPrivate = post.profiles?.is_private || false
+      const isFollowed = followingIds.includes(post.user_id)
+      const isOwnPost = post.user_id === user.id
+      return !isPrivate || isFollowed || isOwnPost
+    })
+
+    return {
+      posts: await attachProfilesToPosts(filteredPosts),
+      hasMore: (posts || []).length === limit,
+    }
+  }
+
+  // If not authenticated, only show posts from public accounts
   const { data: posts, error } = await supabase
     .from('posts')
     .select(`
       *,
       likes_count:likes(count),
-      comments_count:comments(count)
+      comments_count:comments(count),
+      profiles!posts_user_id_fkey(id, is_private)
     `)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
   if (error) throw error
 
+  // Filter to only show posts from public accounts
+  const filteredPosts = (posts || []).filter((post: any) => !post.profiles?.is_private)
+
   return {
-    posts: await attachProfilesToPosts(posts || []),
+    posts: await attachProfilesToPosts(filteredPosts),
     hasMore: (posts || []).length === limit,
   }
 }
 
 export const getUserPosts = async (userId: string, limit = 20, offset = 0) => {
+  const currentUser = await getCurrentUser()
+  const isOwnProfile = currentUser?.id === userId
+
+  // Get the target profile to check if it's private
+  const targetProfile = await getProfile(userId)
+  const isPrivate = targetProfile?.is_private || false
+
+  // If profile is private and not own profile, check if current user follows them
+  if (isPrivate && !isOwnProfile && currentUser) {
+    const isFollowed = await isFollowing(userId)
+    if (!isFollowed) {
+      // Return empty posts for private accounts not followed
+      return {
+        posts: [],
+        hasMore: false,
+      }
+    }
+  }
+
+  // If profile is private and user is not authenticated, return empty
+  if (isPrivate && !currentUser) {
+    return {
+      posts: [],
+      hasMore: false,
+    }
+  }
+
   const { data, error } = await supabase
     .from('posts')
     .select(`
@@ -199,6 +272,16 @@ export const getUserPosts = async (userId: string, limit = 20, offset = 0) => {
     posts: await attachProfilesToPosts(data || []),
     hasMore: (data || []).length === limit,
   }
+}
+
+export const getUserPostsCount = async (userId: string): Promise<number> => {
+  const { count, error } = await supabase
+    .from('posts')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+
+  if (error) throw error
+  return count || 0
 }
 
 export const getFeedPosts = async (userId: string, limit = 20, offset = 0) => {
@@ -495,6 +578,42 @@ export const getFollowing = async (userId: string) => {
   return (data || []).map((item: any) => item.profiles).filter(Boolean) as Profile[]
 }
 
+/**
+ * Get mutual friends between two users
+ * Returns users that both user1 and user2 follow
+ */
+export const getMutualFriends = async (user1Id: string, user2Id: string, limit = 6) => {
+  // Get users that user1 follows
+  const { data: user1Following, error: error1 } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', user1Id)
+
+  if (error1) throw error1
+
+  const user1FollowingIds = user1Following?.map(f => f.following_id) || []
+
+  // Get users that user2 follows
+  const { data: user2Following, error: error2 } = await supabase
+    .from('follows')
+    .select(`
+      following_id,
+      profiles!follows_following_id_fkey(*)
+    `)
+    .eq('follower_id', user2Id)
+
+  if (error2) throw error2
+
+  // Filter to find mutual friends (users that both follow)
+  const mutualFriends = (user2Following || [])
+    .filter((item: any) => user1FollowingIds.includes(item.following_id))
+    .map((item: any) => item.profiles)
+    .filter(Boolean)
+    .slice(0, limit) as Profile[]
+
+  return mutualFriends
+}
+
 // ============== FOLLOW REQUEST HELPERS ==============
 
 export const sendFollowRequest = async (userId: string) => {
@@ -508,9 +627,15 @@ export const sendFollowRequest = async (userId: string) => {
       .from('follow_requests')
       .insert({ requester_id: currentUser.id, requested_id: userId, status: 'pending' })
 
-    if (error && error.code !== '23505') throw error
-  } catch (err) {
-    console.warn('Follow request operation failed (table may not exist):', err)
+    // Silently handle duplicate constraint errors
+    if (error && error.code !== '23505') {
+      console.warn('Follow request error:', error.message)
+    }
+  } catch (err: any) {
+    // Silently ignore duplicate errors
+    if (err && err.code !== '23505') {
+      console.warn('Follow request operation failed:', err)
+    }
   }
 }
 
@@ -639,7 +764,14 @@ export const followUserWithPrivacy = async (userId: string): Promise<{ type: 'fo
 
   if (targetProfile.is_private) {
     // Send a follow request instead
-    await sendFollowRequest(userId)
+    try {
+      await sendFollowRequest(userId)
+    } catch (err) {
+      // Silently handle duplicate request errors
+      if (err && typeof err === 'object' && 'code' in err && err.code !== '23505') {
+        throw err
+      }
+    }
     return { type: 'requested' }
   }
 
@@ -760,14 +892,14 @@ export const subscribeToNotifications = (callback: (payload: any) => void) => {
         callback
       )
       .subscribe((status) => {
-        if (status !== 'SUBSCRIBED') {
-          console.warn('Realtime notification channel status:', status)
+        // Only log unexpected errors, not normal CLOSED states
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('Realtime notification channel error:', status)
         }
       })
     return channel
   } catch (err) {
     // Gracefully handle if realtime is not configured for this table
-    console.warn('Could not subscribe to notifications:', err)
     return { unsubscribe: () => {} } as any
   }
 }

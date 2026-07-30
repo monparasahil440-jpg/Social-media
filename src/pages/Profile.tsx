@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../contexts/ToastProvider'
 import {
   getProfile,
   getUserPosts,
+  getUserPostsCount,
   getFollowersCount,
   getFollowingCount,
   isFollowing,
@@ -23,6 +25,7 @@ import {
   shareContent,
   signOutUser,
   supabase,
+  getMutualFriends,
 } from '../lib/supabaseClient'
 import PostCard from '../components/PostCard'
 import FollowListModal from '../components/FollowListModal'
@@ -34,9 +37,12 @@ import type { Profile as ProfileType, Post } from '../types'
 const Profile = () => {
   const { userId } = useParams<{ userId: string }>()
   const { user: currentUser, refreshProfile, signOut } = useAuth()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const [profile, setProfile] = useState<ProfileType | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
+  const [postsCount, setPostsCount] = useState(0)
+  const [mutualFriends, setMutualFriends] = useState<ProfileType[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [followsYou, setFollowsYou] = useState(false)
@@ -99,15 +105,17 @@ const Profile = () => {
     setIsLoading(true)
     setError('')
     try {
-      const [profileData, userPostsResult, followers, following, iFollowThemResult, theyFollowMeResult, pendingRequest, blocked] = await Promise.all([
+      const [profileData, userPostsResult, totalPostsCount, followers, following, iFollowThemResult, theyFollowMeResult, pendingRequest, blocked, mutual] = await Promise.all([
         getProfile(userId),
         getUserPosts(userId),
+        getUserPostsCount(userId),
         getFollowersCount(userId),
         getFollowingCount(userId),
         currentUser ? isFollowing(userId) : Promise.resolve(false),
         currentUser ? doesUserFollowMe(userId) : Promise.resolve(false),
         currentUser ? getPendingFollowRequest(userId) : Promise.resolve(null),
         currentUser ? isBlocked(userId) : Promise.resolve(false),
+        currentUser ? getMutualFriends(currentUser.id, userId) : Promise.resolve([]),
       ])
 
       if (!profileData) {
@@ -118,12 +126,14 @@ const Profile = () => {
 
       setProfile(profileData)
       setPosts(userPostsResult.posts)
+      setPostsCount(totalPostsCount)
       setFollowersCount(followers)
       setFollowingCount(following)
       setIFollowThem(iFollowThemResult)
       setFollowsYou(theyFollowMeResult)
       setIsRequested(!!pendingRequest)
       setIsUserBlocked(blocked)
+      setMutualFriends(mutual)
       setIsPrivate(profileData.is_private)
 
       setEditFullName(profileData.full_name || '')
@@ -138,7 +148,7 @@ const Profile = () => {
   }
 
   const handleFollowToggle = async () => {
-    if (!userId || !currentUser) return
+    if (!userId || !currentUser || isFollowLoading) return
     setIsFollowLoading(true)
     try {
       if (iFollowThem) {
@@ -157,6 +167,8 @@ const Profile = () => {
           setFollowersCount((prev) => prev + 1)
         }
       }
+      // Reload profile to get updated follow status
+      await loadProfile()
     } catch (err) {
       console.error('Error toggling follow:', err)
     } finally {
@@ -373,18 +385,30 @@ const Profile = () => {
             {/* Stats - Under avatar on mobile, inline on desktop */}
             <div className="flex items-center justify-center sm:justify-start gap-6 mb-4 sm:mb-0 sm:mt-4">
               <div className="text-center">
-                <p className="text-lg font-bold text-gray-900">{posts.length}</p>
+                <p className="text-lg font-bold text-gray-900">{postsCount}</p>
                 <p className="text-xs text-gray-500">Posts</p>
               </div>
               <button
-                onClick={() => setShowFollowers(true)}
+                onClick={() => {
+                  if (profile.is_private && !isOwnProfile && !iFollowThem) {
+                    showToast('This is a private account', 'error')
+                    return
+                  }
+                  setShowFollowers(true)
+                }}
                 className="text-center hover:opacity-80 transition-opacity"
               >
                 <p className="text-lg font-bold text-gray-900">{followersCount}</p>
                 <p className="text-xs text-gray-500">Followers</p>
               </button>
               <button
-                onClick={() => setShowFollowing(true)}
+                onClick={() => {
+                  if (profile.is_private && !isOwnProfile && !iFollowThem) {
+                    showToast('This is a private account', 'error')
+                    return
+                  }
+                  setShowFollowing(true)
+                }}
                 className="text-center hover:opacity-80 transition-opacity"
               >
                 <p className="text-lg font-bold text-gray-900">{followingCount}</p>
@@ -439,6 +463,37 @@ const Profile = () => {
               {profile.bio && !isEditing && (
                 <div className="mt-3 space-y-2">
                   <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{profile.bio}</p>
+                </div>
+              )}
+
+              {/* Mutual Friends */}
+              {!isOwnProfile && mutualFriends.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 mb-2">
+                    <span className="font-semibold text-gray-900">{mutualFriends.length}</span> mutual friend{mutualFriends.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="flex -space-x-2 overflow-hidden">
+                    {mutualFriends.slice(0, 6).map((friend) => (
+                      <Link
+                        key={friend.id}
+                        to={`/profile/${friend.id}`}
+                        className="inline-block h-8 w-8 rounded-full ring-2 ring-white hover:ring-indigo-500 transition-all"
+                        title={friend.full_name || friend.username}
+                      >
+                        {friend.avatar_url ? (
+                          <img
+                            src={friend.avatar_url}
+                            alt={friend.full_name || friend.username}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                            {(friend.full_name || friend.username).charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -695,11 +750,34 @@ const Profile = () => {
           <>
             {posts.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
-                <div className="text-5xl mb-4">📭</div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">No posts yet</h3>
-                <p className="text-gray-500 text-sm">
-                  {isOwnProfile ? 'Share your first post with the community!' : 'This user hasn\'t posted anything yet.'}
-                </p>
+                {profile.is_private && !isOwnProfile && !iFollowThem ? (
+                  <>
+                    <div className="text-5xl mb-4">🔒</div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">This is a private account</h3>
+                    <p className="text-gray-500 text-sm mb-4">Follow this account to see their posts</p>
+                    {!isRequested && (
+                      <button
+                        onClick={handleFollowToggle}
+                        disabled={isFollowLoading}
+                        className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium rounded-full hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm disabled:opacity-50"
+                      >
+                        {isFollowLoading ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                        ) : (
+                          'Follow'
+                        )}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-5xl mb-4">📭</div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">No posts yet</h3>
+                    <p className="text-gray-500 text-sm">
+                      {isOwnProfile ? 'Share your first post with the community!' : 'This user hasn\'t posted anything yet.'}
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-1">
