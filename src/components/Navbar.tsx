@@ -6,6 +6,16 @@ import NotificationBell from './NotificationBell'
 import Avatar from './Avatar'
 import CreatePost from './CreatePost'
 import type { Post } from '../types'
+import type { ReactNode } from 'react'
+
+interface NavLink {
+  path?: string
+  label: string
+  icon: ReactNode
+  iconOutline: ReactNode
+  badge?: number
+  isCreatePost?: boolean
+}
 
 const Navbar = () => {
   const { user, profile, signOut } = useAuth()
@@ -49,7 +59,7 @@ const Navbar = () => {
     navigate('/')
   }
 
-  const navLinks = [
+  const navLinks: NavLink[] = [
     {
       path: '/',
       label: 'Home',
@@ -146,26 +156,43 @@ const Navbar = () => {
 
             {/* Desktop Navigation */}
             <div className="flex items-center gap-8">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={`relative flex items-center justify-center p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 ${
-                    isActive(link.path)
-                      ? 'bg-[#e0f2fe] border-[#6bc8e6] shadow-lg shadow-[#6bc8e6]/50'
-                      : 'bg-transparent border-transparent'
-                  }`}
-                  style={{ borderWidth: '3px' }}
-                  title={link.label}
-                >
-                  {link.iconOutline}
-                  {link.badge && link.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                      {link.badge > 99 ? '99+' : link.badge}
-                    </span>
-                  )}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                  if (link.isCreatePost) {
+                    return (
+                      <button
+                        key="create-post-desktop"
+                        onClick={() => setShowCreatePostModal(true)}
+                        className="relative flex items-center justify-center p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50"
+                        style={{ borderWidth: '3px' }}
+                        title={link.label}
+                      >
+                        {link.iconOutline}
+                      </button>
+                    )
+                  }
+                      if (!link.path) return null
+                  return (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`relative flex items-center justify-center p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 ${
+                        isActive(link.path)
+                          ? 'bg-[#e0f2fe] border-[#6bc8e6] shadow-lg shadow-[#6bc8e6]/50'
+                          : 'bg-transparent border-transparent'
+                      }`}
+                      style={{ borderWidth: '3px' }}
+                      title={link.label}
+                    >
+                      {link.iconOutline}
+
+                      {link.badge && link.badge > 0 && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                          {link.badge > 99 ? '99+' : link.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
 
               {/* Notification Bell */}
               <NotificationBell />
@@ -221,6 +248,7 @@ const Navbar = () => {
                 </button>
               )
             }
+            if (!link.path) return null
             return (
               <Link
                 key={link.path}
