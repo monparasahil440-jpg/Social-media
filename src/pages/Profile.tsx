@@ -26,6 +26,7 @@ import {
   signOutUser,
   supabase,
   getMutualFriends,
+  getSavedPosts,
 } from '../lib/supabaseClient'
 import PostCard from '../components/PostCard'
 import FollowListModal from '../components/FollowListModal'
@@ -60,6 +61,27 @@ const Profile = () => {
   const [showOptions, setShowOptions] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [activeTab, setActiveTab] = useState<'posts' | 'saved'>('posts')
+  const [savedPosts, setSavedPosts] = useState<Post[]>([])
+  const [isSavedLoading, setIsSavedLoading] = useState(false)
+
+  const loadSavedPosts = async () => {
+    if (!currentUser) return
+    setIsSavedLoading(true)
+    try {
+      const data = await getSavedPosts(currentUser.id)
+      setSavedPosts(data)
+    } catch (err) {
+      console.error('Error loading saved posts:', err)
+    } finally {
+      setIsSavedLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'saved') {
+      loadSavedPosts()
+    }
+  }, [activeTab, currentUser?.id])
 
   // Edit profile state
   const [isEditing, setIsEditing] = useState(false)
@@ -317,41 +339,42 @@ const Profile = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
+    <div className="max-w-3xl mx-auto px-4 py-6">
       {/* Profile Header */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm p-6">
+      <div className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 overflow-hidden shadow-floating p-6 sm:p-8">
         {/* Profile Info */}
-        <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-8">
           {/* Avatar - Centered on mobile, left on desktop */}
           <div className="relative group shrink-0 mx-auto sm:mx-0">
-            {/* Avatar Image or Initial */}
-            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden">
-              {(editAvatarPreview || profile.avatar_url) && isEditing ? (
-                <img
-                  src={editAvatarPreview || profile.avatar_url || ''}
-                  alt={profile.full_name || ''}
-                  className="w-full h-full object-cover"
-                />
-              ) : profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.full_name || ''}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                (profile.full_name || profile.username).charAt(0).toUpperCase()
-              )}
+            <div className="p-1 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-xl shadow-indigo-500/20 group-hover:scale-105 transition-transform duration-300">
+              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold overflow-hidden">
+                {(editAvatarPreview || profile.avatar_url) && isEditing ? (
+                  <img
+                    src={editAvatarPreview || profile.avatar_url || ''}
+                    alt={profile.full_name || ''}
+                    className="w-full h-full object-cover"
+                  />
+                ) : profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.full_name || ''}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  (profile.full_name || profile.username).charAt(0).toUpperCase()
+                )}
+              </div>
             </div>
 
             {/* Instagram-style camera overlay on hover - only in edit mode */}
             {isOwnProfile && isEditing && (
-              <label className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity border-4 border-white">
+              <label className="absolute inset-1 bg-slate-900/60 backdrop-blur-sm rounded-full flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="flex flex-col items-center gap-1">
                   <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span className="text-white text-[10px] font-medium">Change Photo</span>
+                  <span className="text-white text-[10px] font-extrabold">Change Photo</span>
                 </div>
                 <input
                   type="file"
@@ -361,7 +384,6 @@ const Profile = () => {
                     const file = e.target.files?.[0]
                     if (file) {
                       setEditAvatarFile(file)
-                      // Use createObjectURL for instant synchronous preview
                       const previewUrl = URL.createObjectURL(file)
                       setEditAvatarPreview(previewUrl)
                     }
@@ -369,24 +391,15 @@ const Profile = () => {
                 />
               </label>
             )}
-
-            {/* Non-editing mode: simple camera overlay on hover */}
-            {isOwnProfile && !isEditing && (
-              <label className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity border-4 border-white">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-              </label>
-            )}
           </div>
 
           {/* Profile Info Container */}
           <div className="flex-1 min-w-0 w-full sm:w-auto">
-            {/* Stats - Under avatar on mobile, inline on desktop */}
-            <div className="flex items-center justify-center sm:justify-start gap-6 mb-4 sm:mb-0 sm:mt-4">
-              <div className="text-center">
-                <p className="text-lg font-bold text-gray-900">{postsCount}</p>
-                <p className="text-xs text-gray-500">Posts</p>
+            {/* Stats Pills */}
+            <div className="flex items-center justify-around sm:justify-start gap-4 sm:gap-6 mb-4">
+              <div className="text-center bg-slate-50/80 px-4 py-2 rounded-2xl border border-slate-100 flex-1 sm:flex-none min-w-[75px]">
+                <p className="text-lg font-black text-slate-900 font-heading">{postsCount}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Posts</p>
               </div>
               <button
                 onClick={() => {
@@ -396,10 +409,10 @@ const Profile = () => {
                   }
                   setShowFollowers(true)
                 }}
-                className="text-center hover:opacity-80 transition-opacity"
+                className="text-center bg-slate-50/80 px-4 py-2 rounded-2xl border border-slate-100 hover:bg-slate-100/80 transition-all flex-1 sm:flex-none min-w-[75px]"
               >
-                <p className="text-lg font-bold text-gray-900">{followersCount}</p>
-                <p className="text-xs text-gray-500">Followers</p>
+                <p className="text-lg font-black text-slate-900 font-heading">{followersCount}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Followers</p>
               </button>
               <button
                 onClick={() => {
@@ -409,22 +422,22 @@ const Profile = () => {
                   }
                   setShowFollowing(true)
                 }}
-                className="text-center hover:opacity-80 transition-opacity"
+                className="text-center bg-slate-50/80 px-4 py-2 rounded-2xl border border-slate-100 hover:bg-slate-100/80 transition-all flex-1 sm:flex-none min-w-[75px]"
               >
-                <p className="text-lg font-bold text-gray-900">{followingCount}</p>
-                <p className="text-xs text-gray-500">Following</p>
+                <p className="text-lg font-black text-slate-900 font-heading">{followingCount}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Following</p>
               </button>
               {isOwnProfile && (
                 <button
                   onClick={() => setShowFollowRequests(true)}
-                  className="text-center hover:opacity-80 transition-opacity relative"
+                  className="text-center bg-indigo-50/80 px-4 py-2 rounded-2xl border border-indigo-100 hover:bg-indigo-100/80 transition-all relative flex-1 sm:flex-none min-w-[75px]"
                 >
-                  <p className="text-lg font-bold text-gray-900">
-                    {pendingRequestCount > 0 ? pendingRequestCount : 'Requests'}
+                  <p className="text-lg font-black text-indigo-600">
+                    {pendingRequestCount > 0 ? pendingRequestCount : '0'}
                   </p>
-                  <p className="text-xs text-gray-500">Requests</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Requests</p>
                   {pendingRequestCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-md animate-pulse">
                       {pendingRequestCount}
                     </span>
                   )}
@@ -432,29 +445,29 @@ const Profile = () => {
               )}
             </div>
 
-            {/* Name, Username, and Bio - Centered on mobile, left on desktop */}
-            <div className="text-center sm:text-left mt-4 sm:mt-6">
+            {/* Name, Username, and Bio */}
+            <div className="text-center sm:text-left mt-3">
               <div className="min-w-0">
                 {isEditing && isOwnProfile ? (
                   <input
                     type="text"
                     value={editFullName}
                     onChange={(e) => setEditFullName(e.target.value)}
-                    className="text-xl font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 w-full max-w-sm outline-none focus:ring-2 focus:ring-indigo-500 mx-auto sm:mx-0"
+                    className="text-xl font-extrabold text-slate-900 bg-slate-100 border border-slate-200 rounded-2xl px-3 py-1.5 w-full max-w-sm outline-none focus:ring-2 focus:ring-indigo-500 mx-auto sm:mx-0"
                     placeholder="Your full name"
                   />
                 ) : (
-                  <h1 className="text-xl font-bold text-gray-900 truncate">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate font-heading">
                     {profile.full_name || profile.username}
                   </h1>
                 )}
-                <p className="text-sm text-gray-500 mt-1">@{profile.username}</p>
+                <p className="text-xs font-bold text-indigo-600 mt-0.5">@{profile.username}</p>
                 {profile.is_private && (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 rounded-full mt-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full mt-2">
                     <svg className="w-3.5 h-3.5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-xs font-medium text-indigo-700">Private account</span>
+                    <span className="text-xs font-bold text-indigo-700">Private Account</span>
                   </div>
                 )}
               </div>
@@ -823,11 +836,42 @@ const Profile = () => {
 
         {/* Saved Tab */}
         {activeTab === 'saved' && (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
-            <div className="text-5xl mb-4">🔖</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Saved posts</h3>
-            <p className="text-gray-500 text-sm">Posts you save will appear here</p>
-          </div>
+          <>
+            {isSavedLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : savedPosts.length === 0 ? (
+              <div className="text-center py-12 bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-sm">
+                <div className="text-5xl mb-4">🔖</div>
+                <h3 className="text-base font-bold text-slate-900 mb-1 font-heading">No saved posts yet</h3>
+                <p className="text-xs text-slate-500 font-body">Save posts by tapping the bookmark ribbon on any post to view them here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider font-heading">
+                    {savedPosts.length} Saved {savedPosts.length === 1 ? 'Post' : 'Posts'}
+                  </p>
+                  <button
+                    onClick={loadSavedPosts}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 font-heading"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {savedPosts.map((savedPost) => (
+                    <PostCard
+                      key={savedPost.id}
+                      post={savedPost}
+                      onDelete={(deletedId) => setSavedPosts((prev) => prev.filter((p) => p.id !== deletedId))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

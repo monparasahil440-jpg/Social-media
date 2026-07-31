@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Profile, Post, Comment, Notification, FollowRequest, Block, Conversation, ConversationParticipant, Message, CallSignal } from '../types'
+import type { Profile, Post, Comment, CommentReaction, CommentReactionType, Notification, FollowRequest, Block, Conversation, ConversationParticipant, Message, CallSignal } from '../types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -396,6 +396,65 @@ export const isPostLiked = async (postId: string): Promise<boolean> => {
   return !!data
 }
 
+// ============== SAVE / BOOKMARK HELPERS ==============
+
+export const isPostSaved = (postId: string, userId?: string): boolean => {
+  try {
+    const key = userId ? `saved_posts_${userId}` : 'saved_posts_guest'
+    const saved = localStorage.getItem(key)
+    const list: string[] = saved ? JSON.parse(saved) : []
+    return list.includes(postId)
+  } catch {
+    return false
+  }
+}
+
+export const toggleSavePost = (postId: string, userId?: string): boolean => {
+  try {
+    const key = userId ? `saved_posts_${userId}` : 'saved_posts_guest'
+    const saved = localStorage.getItem(key)
+    let list: string[] = saved ? JSON.parse(saved) : []
+    const isAlreadySaved = list.includes(postId)
+    if (isAlreadySaved) {
+      list = list.filter((id) => id !== postId)
+    } else {
+      list = [postId, ...list]
+    }
+    localStorage.setItem(key, JSON.stringify(list))
+    return !isAlreadySaved
+  } catch {
+    return false
+  }
+}
+
+export const getSavedPosts = async (userId?: string): Promise<Post[]> => {
+  try {
+    const key = userId ? `saved_posts_${userId}` : 'saved_posts_guest'
+    const savedJson = localStorage.getItem(key)
+    const savedIds: string[] = savedJson ? JSON.parse(savedJson) : []
+
+    if (savedIds.length === 0) return []
+
+    const { data, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        likes_count:likes(count),
+        comments_count:comments(count)
+      `)
+      .in('id', savedIds)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    if (!data) return []
+
+    return await attachProfilesToPosts(data)
+  } catch (err) {
+    console.error('Error fetching saved posts:', err)
+    return []
+  }
+}
+
 // ============== COMMENT HELPERS ==============
 
 // Helper to attach profile data to comments
@@ -444,6 +503,7 @@ export const addComment = async (postId: string, content: string) => {
       post_id: postId,
       user_id: user.id,
       content,
+      parent_comment_id: null,
     })
     .select('*')
     .single()
@@ -457,6 +517,182 @@ export const addComment = async (postId: string, content: string) => {
     ...data,
     profiles: profile,
   } as Comment
+}
+
+export const addReply = async (postId: string, parentCommentId: string, content: string) => {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('User not authenticated')
+
+  await ensureProfile()
+
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({
+      post_id: postId,
+      user_id: user.id,
+      content,
+      parent_comment_id: parentCommentId,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  const profile = await getProfile(user.id)
+
+  return {
+    ...data,
+    profiles: profile,
+  } as Comment
+}
+
+// ============== COMMENT REACTION HELPERS ==============
+
+/**
+ * React to a comment with a specific reaction type.
+ * If the user already has a reaction on this comment, it updates it (upsert behavior).
+ * Returns the updated reaction data.
+ */
+export const reactToComment = async (
+  commentId: string,
+  reaction: CommentReactionType
+): Promise<CommentReaction> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  await ensureProfile()
+
+  const { data, error } = await supabase
+    .from('comment_reactions')
+    .upsert(
+      {
+        comment_id: commentId,
+        user_id: currentUser.id,
+        reaction,
+      },
+      {
+        onConflict: 'comment_id, user_id',
+        ignoreDuplicates: false,
+      }
+    )
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as CommentReaction
+}
+
+/**
+ * Remove the current user's reaction from a comment.
+ */
+export const removeCommentReaction = async (commentId: string): Promise<void> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const { error } = await supabase
+    .from('comment_reactions')
+    .delete()
+    .eq('comment_id', commentId)
+    .eq('user_id', currentUser.id)
+
+  if (error) throw error
+}
+
+/**
+ * Get reaction counts for a single comment and the current user's reaction.
+ * Returns a map of reaction type to count, and the user's reaction if any.
+ */
+export const getCommentReactions = async (
+  commentId: string
+): Promise<{
+  reactions: Record<string, number>
+  user_reaction: CommentReactionType | null
+}> => {
+  const currentUser = await getCurrentUser()
+
+  // Get all reactions for this comment
+  const { data, error } = await supabase
+    .from('comment_reactions')
+    .select('reaction, user_id')
+    .eq('comment_id', commentId)
+
+  if (error) throw error
+
+  // Count reactions by type
+  const defaultCounts: Record<string, number> = {
+    like: 0,
+    love: 0,
+    laugh: 0,
+    wow: 0,
+    sad: 0,
+    angry: 0,
+  }
+
+  const counts = (data || []).reduce((acc: Record<string, number>, r: any) => {
+    acc[r.reaction] = (acc[r.reaction] || 0) + 1
+    return acc
+  }, { ...defaultCounts })
+
+  // Find current user's reaction
+  let userReaction: CommentReactionType | null = null
+  if (currentUser) {
+    const userReactionData = (data || []).find(
+      (r: any) => r.user_id === currentUser.id
+    )
+    userReaction = userReactionData?.reaction || null
+  }
+
+  return { reactions: counts, user_reaction: userReaction }
+}
+
+/**
+ * Get all reactions for a list of comments (batch query for efficiency).
+ * Returns a map of comment_id -> { reactions, user_reaction }
+ */
+export const getBatchCommentReactions = async (
+  commentIds: string[]
+): Promise<Record<string, { reactions: Record<string, number>; user_reaction: CommentReactionType | null }>> => {
+  if (commentIds.length === 0) return {}
+
+  const currentUser = await getCurrentUser()
+
+  const { data, error } = await supabase
+    .from('comment_reactions')
+    .select('comment_id, reaction, user_id')
+    .in('comment_id', commentIds)
+
+  if (error) throw error
+
+  const defaultCounts: Record<string, number> = {
+    like: 0,
+    love: 0,
+    laugh: 0,
+    wow: 0,
+    sad: 0,
+    angry: 0,
+  }
+
+  const result: Record<string, { reactions: Record<string, number>; user_reaction: CommentReactionType | null }> = {}
+
+  // Initialize all comments with zero counts
+  commentIds.forEach((id) => {
+    result[id] = { reactions: { ...defaultCounts }, user_reaction: null }
+  })
+
+  // Aggregate counts and find user's reaction
+  ;(data || []).forEach((r: any) => {
+    if (!result[r.comment_id]) {
+      result[r.comment_id] = { reactions: { ...defaultCounts }, user_reaction: null }
+    }
+    result[r.comment_id].reactions[r.reaction] =
+      (result[r.comment_id].reactions[r.reaction] || 0) + 1
+
+    if (currentUser && r.user_id === currentUser.id) {
+      result[r.comment_id].user_reaction = r.reaction
+    }
+  })
+
+  return result
 }
 
 // ============== FOLLOW HELPERS ==============
@@ -623,35 +859,53 @@ export const sendFollowRequest = async (userId: string) => {
   await ensureProfile()
 
   try {
-    const { error } = await supabase
-      .from('follow_requests')
-      .insert({ requester_id: currentUser.id, requested_id: userId, status: 'pending' })
+    // Use the SECURITY DEFINER RPC function to bypass RLS issues with upsert.
+    // The RPC handles both INSERT and UPDATE (re-request after rejection) cases.
+    const { data, error } = await supabase.rpc('send_follow_request', {
+      p_requester_id: currentUser.id,
+      p_requested_id: userId,
+    })
 
-    // Silently handle duplicate constraint errors
-    if (error && error.code !== '23505') {
-      console.warn('Follow request error:', error.message)
+    if (error) {
+      // If RPC is not found (migration not yet applied), provide clear message
+      if (error.code === 'PGRST202' || error.message?.includes('function "send_follow_request" does not exist')) {
+        throw new Error('Follow request is not available. Please run the latest database migration (00020).')
+      }
+      throw error
     }
+
+    // The RPC handles notification creation internally, no extra work needed
+    return data
   } catch (err: any) {
-    // Silently ignore duplicate errors
-    if (err && err.code !== '23505') {
-      console.warn('Follow request operation failed:', err)
+    // Re-throw with more context
+    if (err instanceof Error) {
+      throw err
     }
+    throw new Error(err?.message || 'Failed to send follow request')
   }
 }
 
 export const approveFollowRequest = async (requestId: string) => {
   try {
-    const { data, error } = await supabase
-      .from('follow_requests')
-      .update({ status: 'approved' })
-      .eq('id', requestId)
-      .select('*')
-      .single()
+    // Use the SECURITY DEFINER RPC function that atomically:
+    // 1. Updates the follow request status to 'approved'
+    // 2. Creates the follow relationship (requester follows requested user)
+    // 3. Creates a notification for the requester
+    const { data, error } = await supabase.rpc('approve_follow_request', {
+      p_request_id: requestId,
+    })
 
-    if (error) throw error
+    if (error) {
+      // If RPC is not found (migration not yet applied), provide clear message
+      if (error.code === 'PGRST202' || error.message?.includes('function "approve_follow_request" does not exist')) {
+        throw new Error('Follow request approval is not available. Please run the latest database migration (00020).')
+      }
+      throw error
+    }
+
     return data as FollowRequest
   } catch (err) {
-    console.warn('Follow request operation failed (table may not exist):', err)
+    console.warn('Follow request operation failed:', err)
     return null as any
   }
 }
@@ -764,14 +1018,7 @@ export const followUserWithPrivacy = async (userId: string): Promise<{ type: 'fo
 
   if (targetProfile.is_private) {
     // Send a follow request instead
-    try {
-      await sendFollowRequest(userId)
-    } catch (err) {
-      // Silently handle duplicate request errors
-      if (err && typeof err === 'object' && 'code' in err && err.code !== '23505') {
-        throw err
-      }
-    }
+    await sendFollowRequest(userId)
     return { type: 'requested' }
   }
 
@@ -1166,8 +1413,6 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
 
   try {
     // Check if a 1-on-1 conversation already exists between these two users
-    let existingConversationId: string | null = null
-
     try {
       const { data: existingConversations, error: searchError } = await supabase
         .from('conversation_participants')
@@ -1184,29 +1429,26 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
           .in('conversation_id', conversationIds)
 
         if (!mutualError && mutual && mutual.length > 0) {
-          existingConversationId = mutual[0].conversation_id
+          // Check each mutual conversation to find one that actually exists in `conversations`
+          for (const m of mutual) {
+            const { data: conv } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('id', m.conversation_id)
+              .maybeSingle()
+
+            if (conv) {
+              const otherProfile = await getProfile(otherUserId)
+              return {
+                ...conv,
+                other_participant: otherProfile,
+              } as Conversation
+            }
+          }
         }
       }
-    } catch {
-      // RLS might be broken — fall through to creating a new conversation
-      console.warn('[createOrGetConversation] Could not check existing conversations due to RLS — will create new one')
-    }
-
-    if (existingConversationId) {
-      const { data: conv, error: convError } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('id', existingConversationId)
-        .single()
-
-      if (convError) throw convError
-
-      const otherProfile = await getProfile(otherUserId)
-
-      return {
-        ...conv,
-        other_participant: otherProfile,
-      } as Conversation
+    } catch (err) {
+      console.warn('[createOrGetConversation] Could not check existing conversations due to RLS — will create new one', err)
     }
 
     // Generate UUID client-side to avoid RLS SELECT policy blocking the insert return value
@@ -1238,19 +1480,21 @@ export const createOrGetConversation = async (otherUserId: string): Promise<Conv
       throw participantError2
     }
 
-    // Now fetch the full conversation
-    const { data: fullConversation, error: fetchError } = await supabase
+    // Fetch the full conversation safely with maybeSingle (avoid PGRST116)
+    const { data: fullConversation } = await supabase
       .from('conversations')
       .select('*')
       .eq('id', conversationId)
-      .single()
+      .maybeSingle()
 
-    if (fetchError) throw fetchError
-
-    // Fetch the other participant's profile
     const otherProfile = await getProfile(otherUserId)
+    const now = new Date().toISOString()
 
     return {
+      id: conversationId,
+      created_at: fullConversation?.created_at || now,
+      updated_at: fullConversation?.updated_at || now,
+      last_message_at: fullConversation?.last_message_at || now,
       ...fullConversation,
       other_participant: otherProfile,
     } as Conversation

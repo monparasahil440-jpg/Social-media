@@ -27,47 +27,56 @@ const SignUp = () => {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex relative overflow-hidden bg-slate-50">
+      {/* Background ambient decorative light spheres */}
+      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-400/25 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-400/20 rounded-full blur-3xl pointer-events-none" />
+
       {/* Left - Illustration */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 items-center justify-center p-12">
-        <div className="text-center text-white max-w-md">
-          <div className="text-8xl mb-8">🎉</div>
-          <h2 className="text-3xl font-bold mb-4">Join our community</h2>
-          <p className="text-lg text-white/80">
-            Create an account and start connecting with people who share your interests.
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 items-center justify-center p-12 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-purple-400/30 via-transparent to-black/30 pointer-events-none" />
+        <div className="text-center text-white max-w-md relative z-10">
+          <div className="w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-md flex items-center justify-center text-5xl mx-auto mb-6 shadow-2xl border border-white/20">
+            🎉
+          </div>
+          <h2 className="text-3xl font-black mb-3 tracking-tight">Join Our Community</h2>
+          <p className="text-sm text-white/80 leading-relaxed">
+            Create an account today to share creative posts, connect with friends, and start audio/video chats.
           </p>
-          <div className="mt-8 grid grid-cols-3 gap-4">
-            <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
+          <div className="mt-8 grid grid-cols-3 gap-3">
+            <div className="bg-white/15 rounded-2xl p-4 backdrop-blur-md border border-white/10 hover:scale-105 transition-transform">
               <div className="text-2xl mb-1">✍️</div>
-              <div className="text-sm font-medium">Create</div>
+              <div className="text-xs font-bold">Create</div>
             </div>
-            <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
+            <div className="bg-white/15 rounded-2xl p-4 backdrop-blur-md border border-white/10 hover:scale-105 transition-transform">
               <div className="text-2xl mb-1">🤝</div>
-              <div className="text-sm font-medium">Connect</div>
+              <div className="text-xs font-bold">Connect</div>
             </div>
-            <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
+            <div className="bg-white/15 rounded-2xl p-4 backdrop-blur-md border border-white/10 hover:scale-105 transition-transform">
               <div className="text-2xl mb-1">📸</div>
-              <div className="text-sm font-medium">Share</div>
+              <div className="text-xs font-bold">Share</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Right - Form */}
-      <div className="flex-1 flex items-center justify-center px-6 lg:px-12">
-        <div className="w-full max-w-md">
-          <div className="mb-10">
-            <div className="text-4xl mb-4">📱</div>
-            <h1 className="text-3xl font-bold text-gray-900">Create account</h1>
-            <p className="mt-2 text-gray-500">
-              Start your journey with us
+      <div className="flex-1 flex items-center justify-center px-6 lg:px-12 relative z-10 py-10">
+        <div className="w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-3xl p-8 border border-slate-200/80 shadow-2xl shadow-purple-500/10">
+          <div className="mb-8 text-center sm:text-left">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-white text-2xl shadow-lg shadow-purple-500/30 mb-4 mx-auto sm:mx-0">
+              ✨
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-heading">Create account</h1>
+            <p className="mt-1.5 text-xs sm:text-sm font-medium text-slate-500">
+              Join thousands of people connecting every day
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                Username
+              <label htmlFor="username" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
+                Username (optional)
               </label>
               <input
                 id="username"
@@ -75,13 +84,13 @@ const SignUp = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm"
+                className="w-full px-4 py-3 bg-white border border-slate-200/80 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 text-sm font-medium transition-all"
                 placeholder="johndoe"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
                 Email address
               </label>
               <input
@@ -92,13 +101,13 @@ const SignUp = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm"
+                className="w-full px-4 py-3 bg-white border border-slate-200/80 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 text-sm font-medium transition-all"
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1.5">
                 Password
               </label>
               <input
@@ -110,21 +119,21 @@ const SignUp = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={6}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm"
+                className="w-full px-4 py-3 bg-white border border-slate-200/80 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 text-sm font-medium transition-all"
                 placeholder="At least 6 characters"
               />
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 animate-fade-in">
+                <p className="text-xs font-semibold text-rose-600">{error}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-pink-600 to-rose-500 text-white text-sm font-bold rounded-2xl shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/40 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -132,14 +141,14 @@ const SignUp = () => {
                   Creating account...
                 </>
               ) : (
-                'Create account'
+                'Create New Account'
               )}
             </button>
 
-            <p className="text-center text-sm text-gray-500">
+            <p className="text-center text-xs font-medium text-slate-500 pt-2">
               Already have an account?{' '}
-              <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">
-                Sign in
+              <Link to="/login" className="text-purple-600 hover:underline font-extrabold">
+                Sign in instead
               </Link>
             </p>
           </form>

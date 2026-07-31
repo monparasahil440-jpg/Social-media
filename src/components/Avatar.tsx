@@ -13,11 +13,11 @@ const Avatar = ({ src, name, size = 'w-10 h-10', className = '' }: AvatarProps) 
   // If we have a valid src and it hasn't errored, render the image
   if (src && !imgError) {
     return (
-      <div className={`${size} rounded-full overflow-hidden shrink-0 ${className}`}>
+      <div className={`${size} rounded-full overflow-hidden shrink-0 flex items-center justify-center ${className}`}>
         <img
           src={src}
           alt={name || 'Avatar'}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover object-center block rounded-full"
           onError={() => setImgError(true)}
         />
       </div>
@@ -29,9 +29,9 @@ const Avatar = ({ src, name, size = 'w-10 h-10', className = '' }: AvatarProps) 
 
   return (
     <div
-      className={`${size} rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm shrink-0 ${className}`}
+      className={`${size} rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs leading-none shrink-0 overflow-hidden select-none ${className}`}
     >
-      {initial}
+      <span className="leading-none flex items-center justify-center translate-y-[0.5px]">{initial}</span>
     </div>
   )
 }

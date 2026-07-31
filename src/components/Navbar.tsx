@@ -140,100 +140,107 @@ const Navbar = () => {
 
   return (
     <>
-      {/* Desktop Navbar */}
-      <nav className="hidden md:block bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center">
-              <Link to="/" className="flex items-center gap-2">
-                <span className="text-2xl">📱</span>
-                <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  SocialMedia
-                </span>
-              </Link>
+      {/* Desktop Floating Glass Navbar */}
+      <nav className="hidden md:block sticky top-0 z-50 px-4 py-3 glass-nav transition-all">
+        <div className="max-w-6xl mx-auto flex justify-between items-center h-12">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform duration-300">
+              <span className="text-xl">✨</span>
             </div>
+            <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent font-heading">
+              SocialMedia
+            </span>
+          </Link>
 
-            {/* Desktop Navigation */}
-            <div className="flex items-center gap-8">
-              {navLinks.map((link) => {
-                  if (link.isCreatePost) {
-                    return (
-                      <button
-                        key="create-post-desktop"
-                        onClick={() => setShowCreatePostModal(true)}
-                        className="relative flex items-center justify-center p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50"
-                        style={{ borderWidth: '3px' }}
-                        title={link.label}
-                      >
-                        {link.iconOutline}
-                      </button>
-                    )
-                  }
-                      if (!link.path) return null
-                  return (
-                    <Link
-                      key={link.path}
-                      to={link.path}
-                      className={`relative flex items-center justify-center p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 ${
-                        isActive(link.path)
-                          ? 'bg-[#e0f2fe] border-[#6bc8e6] shadow-lg shadow-[#6bc8e6]/50'
-                          : 'bg-transparent border-transparent'
-                      }`}
-                      style={{ borderWidth: '3px' }}
-                      title={link.label}
-                    >
-                      {link.iconOutline}
+          {/* Desktop Navigation Links */}
+          <div className="flex items-center gap-3">
+            {navLinks.map((link) => {
+              if (link.isCreatePost) {
+                return (
+                  <button
+                    key="create-post-desktop"
+                    onClick={() => setShowCreatePostModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/35 hover:scale-105 active:scale-95 transition-all duration-200"
+                    title={link.label}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Create</span>
+                  </button>
+                )
+              }
+              if (!link.path) return null
+              const active = isActive(link.path)
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={`relative p-2.5 rounded-2xl transition-all duration-200 flex items-center justify-center ${
+                    active
+                      ? 'bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-500/10 font-bold'
+                      : 'text-slate-600 hover:bg-slate-100/80 hover:text-indigo-600'
+                  }`}
+                  title={link.label}
+                >
+                  {link.iconOutline}
+                  {link.badge && link.badge > 0 ? (
+                    <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[11px] font-extrabold rounded-full flex items-center justify-center shadow-md shadow-rose-500/30 ring-2 ring-white animate-pulse">
+                      {link.badge > 99 ? '99+' : link.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              )
+            })}
 
-                      {link.badge && link.badge > 0 && (
-                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                          {link.badge > 99 ? '99+' : link.badge}
-                        </span>
-                      )}
-                    </Link>
-                  )
-                })}
+            <div className="w-px h-6 bg-slate-200 mx-1" />
 
-              {/* Notification Bell */}
-              <NotificationBell />
+            {/* Notification Bell */}
+            <NotificationBell />
 
-              {/* Profile Avatar */}
-              <Link to={`/profile/${user?.id}`}>
-                <Avatar
-                  src={profile?.avatar_url}
-                  name={profile?.full_name || profile?.username || user?.email}
-                  size="w-7 h-7"
-                />
-              </Link>
-            </div>
+            {/* Profile Avatar */}
+            <Link to={`/profile/${user?.id}`} className="scale-105 hover:scale-110 transition-transform duration-200 ml-1 shrink-0 flex items-center justify-center">
+              <div className="w-[36px] h-[36px] p-[2px] rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shrink-0">
+                <div className="w-full h-full rounded-full flex items-center justify-center overflow-hidden">
+                  <Avatar
+                    src={profile?.avatar_url}
+                    name={profile?.full_name || profile?.username || user?.email}
+                    size="w-full h-full"
+                  />
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       </nav>
 
       {/* Create Post Modal */}
       {showCreatePostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Create Post</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full max-h-[90vh] overflow-y-auto transform transition-all">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-10">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span className="text-xl">📝</span> Create New Post
+              </h2>
               <button
                 onClick={() => setShowCreatePostModal(false)}
-                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-5">
               <CreatePost onPostCreated={handlePostCreated} />
             </div>
           </div>
         </div>
       )}
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+      {/* Mobile Bottom Dock Navigation */}
+      <nav className="md:hidden fixed bottom-3 left-3 right-3 glass-dock rounded-3xl z-50 shadow-2xl">
         <div className="flex justify-around items-center h-16 px-2">
           {navLinks.map((link) => {
             if (link.isCreatePost) {
@@ -241,7 +248,7 @@ const Navbar = () => {
                 <button
                   key="create-post"
                   onClick={() => setShowCreatePostModal(true)}
-                  className="relative flex items-center justify-center flex-1 p-2.5 rounded-xl border-2 border-transparent hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 transition-all duration-300 ease-in-out"
+                  className="flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30 active:scale-95 transition-all"
                   title={link.label}
                 >
                   {link.iconOutline}
@@ -249,24 +256,22 @@ const Navbar = () => {
               )
             }
             if (!link.path) return null
+            const active = isActive(link.path)
             return (
               <Link
                 key={link.path}
                 to={link.path}
-                className={`relative flex items-center justify-center flex-1 p-2.5 rounded-xl border-3 transition-all duration-300 ease-in-out hover:bg-[#e0f2fe] hover:border-[#6bc8e6] hover:shadow-lg hover:shadow-[#6bc8e6]/50 ${
-                  isActive(link.path)
-                    ? 'bg-[#e0f2fe] border-[#6bc8e6] shadow-lg shadow-[#6bc8e6]/50'
-                    : 'bg-transparent border-transparent'
+                className={`relative flex items-center justify-center flex-1 py-2 rounded-2xl transition-all ${
+                  active ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
-                style={{ borderWidth: '3px' }}
                 title={link.label}
               >
                 {link.iconOutline}
-                {link.badge && link.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                {link.badge && link.badge > 0 ? (
+                  <span className="absolute top-1 right-3 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                     {link.badge > 99 ? '99+' : link.badge}
                   </span>
-                )}
+                ) : null}
               </Link>
             )
           })}

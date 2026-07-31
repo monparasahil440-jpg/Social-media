@@ -54,119 +54,126 @@ const ChatList = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white border-r border-gray-200">
+    <div className="h-full flex flex-col bg-white/90 backdrop-blur-xl border-r border-slate-200/80">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
+      <div className="px-4 py-3.5 border-b border-slate-200/80 flex items-center justify-between bg-white/80 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <Avatar
-            src={profile?.avatar_url}
-            name={profile?.full_name || profile?.username}
-            size="w-8 h-8"
-          />
-          <h1 className="text-lg font-bold text-gray-900">{user?.email?.split('@')[0]}</h1>
+          <div className="p-0.5 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500">
+            <Avatar
+              src={profile?.avatar_url}
+              name={profile?.full_name || profile?.username}
+              size="w-9 h-9"
+            />
+          </div>
+          <div>
+            <h1 className="text-base font-extrabold text-slate-900 tracking-tight font-heading">{user?.email?.split('@')[0]}</h1>
+            <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-1 font-heading">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" /> Online
+            </span>
+          </div>
         </div>
         <button
           onClick={() => setShowNewChat(true)}
-          className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
+          className="p-2 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm"
           title="New message"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
         </button>
       </div>
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : conversations.length === 0 ? (
           <div className="text-center py-12 px-4">
-            <div className="text-4xl mb-3">💬</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">No messages yet</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Start a conversation with someone
+            <div className="w-14 h-14 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center text-2xl mx-auto mb-3">
+              💬
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1 font-heading">No messages yet</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium font-body">
+              Start a real-time conversation with anyone on the network
             </p>
             <button
               onClick={() => setShowNewChat(true)}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all"
+              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold rounded-full shadow-md hover:scale-105 transition-all font-heading"
             >
               Send a message
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {conversations.map((conv) => (
-              <div
-                key={conv.id}
-                onClick={() => navigate(`/chat/${conv.id}`)}
-                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left ${
-                  activeConversationId === conv.id ? 'bg-indigo-50 hover:bg-indigo-50' : ''
-                }`}
-              >
-                <div className="shrink-0">
-                  <Avatar
-                    src={conv.other_participant?.avatar_url}
-                    name={conv.other_participant?.full_name || conv.other_participant?.username}
-                    size="w-12 h-12"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-sm text-gray-900 truncate">
-                      {conv.other_participant?.full_name || conv.other_participant?.username || 'Unknown User'}
-                    </p>
-                    {conv.last_message && (
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {formatTime(conv.last_message.created_at)}
-                      </span>
-                    )}
+          <div className="space-y-1">
+            {conversations.map((conv) => {
+              const isActive = activeConversationId === conv.id
+              return (
+                <div
+                  key={conv.id}
+                  onClick={() => navigate(`/chat/${conv.id}`)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all cursor-pointer text-left ${
+                    isActive
+                      ? 'bg-indigo-50/90 text-indigo-900 border border-indigo-100 shadow-sm'
+                      : 'hover:bg-slate-100/70 text-slate-700'
+                  }`}
+                >
+                  <div className="shrink-0 p-0.5 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400">
+                    <Avatar
+                      src={conv.other_participant?.avatar_url}
+                      name={conv.other_participant?.full_name || conv.other_participant?.username}
+                      size="w-11 h-11"
+                    />
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <p className="text-sm text-gray-500 truncate">
-                      {getLastMessagePreview(conv)}
-                    </p>
-                    {(conv.unread_count || 0) > 0 && (
-                      <span className="shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                        {conv.unread_count}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Hide/Unhide button */}
-                <div className="relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setConfirmDialog({
-                        show: true,
-                        conv,
-                        action: conv.hidden_at ? 'unhide' : 'hide',
-                      })
-                    }}
-                    className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label={conv.hidden_at ? 'Unhide conversation' : 'Hide conversation'}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {conv.hidden_at ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-xs sm:text-sm text-slate-900 truncate font-heading">
+                        {conv.other_participant?.full_name || conv.other_participant?.username || 'Unknown User'}
+                      </p>
+                      {conv.last_message && (
+                        <span className="text-[10px] font-semibold text-slate-400 shrink-0 font-body">
+                          {formatTime(conv.last_message.created_at)}
+                        </span>
                       )}
-                    </svg>
-                  </button>
-
-                  {/* Hidden indicator */}
-                  {conv.hidden_at && (
-                    <span className="absolute -right-2 -top-2 flex h-3 w-3 items-center justify-center text-xs font-bold rounded-full bg-red-500 text-white">
-                      •
-                    </span>
-                  )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="text-xs text-slate-500 truncate font-normal font-body">
+                        {getLastMessagePreview(conv)}
+                      </p>
+                      {(conv.unread_count || 0) > 0 && (
+                        <span className="shrink-0 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full min-w-[20px] text-center shadow-md shadow-rose-500/20 font-heading">
+                          {conv.unread_count}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Hide/Unhide button */}
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setConfirmDialog({
+                          show: true,
+                          conv,
+                          action: conv.hidden_at ? 'unhide' : 'hide',
+                        })
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition-colors"
+                      aria-label={conv.hidden_at ? 'Unhide conversation' : 'Hide conversation'}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {conv.hidden_at ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -181,46 +188,40 @@ const ChatList = () => {
 
       {/* Confirmation Dialog */}
       {confirmDialog.show && confirmDialog.conv && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden">
-            {/* Dialog content */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-sm w-full mx-4 overflow-hidden transform transition-all">
             <div className="p-6 text-center">
-              {/* Icon */}
-              <div className={`w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center ${
+              <div className={`w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center ${
                 confirmDialog.action === 'hide'
-                  ? 'bg-red-100'
-                  : 'bg-green-100'
+                  ? 'bg-rose-100 text-rose-500'
+                  : 'bg-emerald-100 text-emerald-500'
               }`}>
                 {confirmDialog.action === 'hide' ? (
-                  <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 ) : (
-                  <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 )}
               </div>
 
-              {/* Title */}
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
+              <h3 className="text-lg font-bold text-slate-900 mb-1.5 font-heading">
                 {confirmDialog.action === 'hide' ? 'Hide conversation?' : 'Unhide conversation?'}
               </h3>
 
-              {/* Description */}
-              <p className="text-sm text-gray-500 mb-6">
+              <p className="text-xs text-slate-500 mb-6 leading-relaxed font-body">
                 {confirmDialog.action === 'hide'
-                  ? `This will hide the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} from your inbox. You can unhide it anytime from your settings.`
-                  : `This will restore the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} back to your inbox.`
+                  ? `This will hide the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} from your main inbox.`
+                  : `This will restore the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} back to your main inbox.`
                 }
               </p>
 
-              {/* Buttons */}
-              <div className="flex gap-3">
+              <div className="flex gap-2.5">
                 <button
                   onClick={() => setConfirmDialog({ show: false, conv: null, action: 'hide' })}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-2xl hover:bg-slate-200 transition-colors"
                 >
                   Cancel
                 </button>
@@ -236,14 +237,14 @@ const ChatList = () => {
                           await unhideConversation(c.id)
                         }
                       } catch {
-                        // Error already handled in useChat
+                        // Error handled in useChat
                       }
                     }
                   }}
-                  className={`flex-1 px-4 py-2.5 text-white text-sm font-medium rounded-xl transition-colors ${
+                  className={`flex-1 py-2.5 text-white text-xs font-bold rounded-2xl transition-all ${
                     confirmDialog.action === 'hide'
-                      ? 'bg-red-500 hover:bg-red-600'
-                      : 'bg-green-500 hover:bg-green-600'
+                      ? 'bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20'
+                      : 'bg-emerald-500 hover:bg-emerald-600 shadow-md shadow-emerald-500/20'
                   }`}
                 >
                   {confirmDialog.action === 'hide' ? 'Hide' : 'Unhide'}

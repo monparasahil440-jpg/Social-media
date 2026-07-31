@@ -60,14 +60,16 @@ const Explore = () => {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Explore</h1>
-        <p className="text-gray-500 mt-1">Search for people to connect with</p>
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 font-heading">
+          <span>🔍</span> Explore People
+        </h1>
+        <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">Discover friends, creators, and new accounts to follow</p>
       </div>
 
-      {/* Search Input */}
+      {/* Search Input Container */}
       <div className="mb-8 relative">
         <svg
-          className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -75,7 +77,7 @@ const Explore = () => {
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth={2}
+            strokeWidth={2.5}
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
@@ -83,22 +85,24 @@ const Explore = () => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search users by name or username..."
-          className="w-full pl-12 pr-4 py-3 bg-gray-100 border-0 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+          placeholder="Search by name, username (@handle)..."
+          className="w-full pl-12 pr-10 py-3.5 bg-white/90 backdrop-blur-xl border border-slate-200/80 rounded-2xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all"
         />
         {isLoading && (
           <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-slate-300 border-t-indigo-600 rounded-full animate-spin" />
           </div>
         )}
       </div>
 
       {/* Empty State */}
       {query.length === 0 && (
-        <div className="text-center py-16">
-          <div className="text-6xl mb-4">🔍</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Search for users</h3>
-          <p className="text-gray-500 text-sm">Enter a name or username to find people</p>
+        <div className="text-center py-16 bg-white/80 backdrop-blur-xl rounded-3xl border border-slate-200/80 p-8 shadow-sm">
+          <div className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">
+            🔎
+          </div>
+          <h3 className="text-lg font-bold text-slate-900 mb-1">Search SocialMedia</h3>
+          <p className="text-slate-500 text-xs sm:text-sm">Type at least 2 characters to discover users and profiles</p>
         </div>
       )}
 
@@ -106,8 +110,8 @@ const Explore = () => {
       {query.length >= 2 && (
         <>
           {isLoading ? (
-            <div className="py-12">
-              <LoadingSpinner size="lg" message="Searching..." />
+            <div className="py-16">
+              <LoadingSpinner size="lg" message="Searching profiles..." />
             </div>
           ) : profiles.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -115,49 +119,53 @@ const Explore = () => {
                 <Link
                   key={profile.id}
                   to={`/profile/${profile.id}`}
-                  className="bg-white rounded-xl border border-gray-100 p-4 hover:shadow-md hover:border-gray-200 transition-all group"
+                  className="bg-white/85 backdrop-blur-xl rounded-3xl border border-slate-200/80 p-4 hover:shadow-xl hover:shadow-indigo-500/10 hover:scale-[1.02] transition-all duration-200 group flex flex-col justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar
-                      src={profile.avatar_url}
-                      name={profile.full_name || profile.username}
-                      size="w-12 h-12"
-                    />
+                    <div className="p-0.5 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 group-hover:scale-105 transition-transform duration-200">
+                      <Avatar
+                        src={profile.avatar_url}
+                        name={profile.full_name || profile.username}
+                        size="w-12 h-12"
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
+                      <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-sm truncate">
                         {profile.full_name || profile.username}
                       </p>
-                      <p className="text-xs text-gray-500 truncate">@{profile.username}</p>
+                      <p className="text-xs font-medium text-slate-400 truncate">@{profile.username}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-0.5">
+                    <div className="flex flex-col items-end gap-1">
                       {profile.iFollow && profile.followsMe && (
-                        <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
                           Mutual
                         </span>
                       )}
                       {profile.followsMe && !profile.iFollow && (
-                        <span className="text-[10px] font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
                           Follows you
                         </span>
                       )}
                       {profile.iFollow && !profile.followsMe && (
-                        <span className="text-[10px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
                           Following
                         </span>
                       )}
                     </div>
                   </div>
                   {profile.bio && (
-                    <p className="mt-2 text-sm text-gray-500 line-clamp-2">{profile.bio}</p>
+                    <p className="mt-3 text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-2.5 rounded-2xl">{profile.bio}</p>
                   )}
                 </Link>
               ))}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <div className="text-5xl mb-4">�</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">No users found</h3>
-              <p className="text-gray-500 text-sm">Try a different search term</p>
+            <div className="text-center py-16 bg-white/80 backdrop-blur-xl rounded-3xl border border-slate-200/80 p-8 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-3xl mx-auto mb-4">
+                🙁
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">No users found</h3>
+              <p className="text-slate-500 text-xs sm:text-sm">No profiles matched "{query}". Try checking the spelling or search another handle.</p>
             </div>
           )}
         </>

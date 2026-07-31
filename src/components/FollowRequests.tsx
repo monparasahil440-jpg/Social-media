@@ -4,7 +4,6 @@ import {
   getPendingFollowRequestsForMe,
   approveFollowRequest,
   rejectFollowRequest,
-  followUser,
 } from '../lib/supabaseClient'
 import Avatar from './Avatar'
 import LoadingSpinner from './LoadingSpinner'
@@ -35,12 +34,14 @@ const FollowRequests = ({ onClose }: FollowRequestsProps) => {
     }
   }
 
-  const handleApprove = async (requestId: string, requesterId: string) => {
+const handleApprove = async (requestId: string) => {
     setActionLoading((prev) => ({ ...prev, [requestId]: true }))
     try {
       await approveFollowRequest(requestId)
-      // Follow the user back (create the follow relationship)
-      await followUser(requesterId)
+      // The RPC function handles everything atomically:
+      // 1. Updates follow request status to 'approved'
+      // 2. Creates the follow relationship (requester follows the account owner)
+      // 3. Creates a notification for the requester
       // Remove from list
       setRequests((prev) => prev.filter((r) => r.id !== requestId))
     } catch (err) {
@@ -132,7 +133,7 @@ const FollowRequests = ({ onClose }: FollowRequestsProps) => {
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleApprove(request.id, request.requester_id)}
+                    onClick={() => handleApprove(request.id)}
                     disabled={actionLoading[request.id]}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50"
                   >

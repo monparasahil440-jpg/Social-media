@@ -117,39 +117,41 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-slate-50/60 relative">
       {/* Chat Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-3 bg-white shrink-0">
+      <div className="px-4 py-3 border-b border-slate-200/80 flex items-center gap-3 bg-white/90 backdrop-blur-md shrink-0 shadow-sm z-10">
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1.5 -ml-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition-colors md:hidden"
+            className="p-2 -ml-1 rounded-2xl hover:bg-slate-100 text-slate-500 transition-colors md:hidden"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         )}
-        <button onClick={handleAvatarClick} className="flex items-center gap-3 flex-1 min-w-0">
-          <Avatar
-            src={otherUser?.avatar_url}
-            name={otherUser?.full_name || otherUser?.username}
-            size="w-10 h-10"
-          />
+        <button onClick={handleAvatarClick} className="flex items-center gap-3 flex-1 min-w-0 group text-left">
+          <div className="p-0.5 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 group-hover:scale-105 transition-transform">
+            <Avatar
+              src={otherUser?.avatar_url}
+              name={otherUser?.full_name || otherUser?.username}
+              size="w-10 h-10"
+            />
+          </div>
           <div className="min-w-0">
-            <p className="font-semibold text-sm text-gray-900 truncate">
+            <p className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition-colors truncate font-heading">
               {otherUser?.full_name || otherUser?.username || 'Unknown User'}
             </p>
-            <p className="text-xs text-gray-500">@{otherUser?.username || 'unknown'}</p>
+            <p className="text-xs font-medium text-slate-400 font-body">@{otherUser?.username || 'unknown'}</p>
           </div>
         </button>
 
-        {/* Call buttons in header */}
-        <div className="flex items-center gap-1">
+        {/* Call action pill buttons */}
+        <div className="flex items-center gap-2">
           <button
             onClick={handleStartAudioCall}
-            className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Audio call"
+            className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:scale-105 active:scale-95 transition-all shadow-sm"
+            title="Start Audio Call"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -157,8 +159,8 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
           </button>
           <button
             onClick={handleStartVideoCall}
-            className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Video call"
+            className="p-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:scale-105 active:scale-95 transition-all shadow-md shadow-indigo-500/20"
+            title="Start Video Call"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -168,17 +170,19 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
       </div>
 
       {/* Messages Area */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50/50 relative">
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 relative">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <LoadingSpinner size="md" message="Loading messages..." />
+            <LoadingSpinner size="md" message="Securing conversation..." />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-5xl mb-4">👋</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">No messages yet</h3>
-            <p className="text-sm text-gray-500 max-w-xs">
-              Say hello to {otherUser?.full_name || otherUser?.username || 'this user'}!
+          <div className="flex flex-col items-center justify-center h-full text-center py-10">
+            <div className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center text-3xl mb-3 shadow-inner">
+              👋
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1 font-heading">Start a conversation</h3>
+            <p className="text-xs font-medium text-slate-400 max-w-xs leading-relaxed font-body">
+              Send a message or start an audio/video call with {otherUser?.full_name || otherUser?.username || 'this user'}.
             </p>
           </div>
         ) : (
@@ -194,24 +198,11 @@ const ChatWindow = ({ conversation, onBack }: ChatWindowProps) => {
         {showScrollToBottom && (
           <button
             onClick={scrollToBottom}
-            className="fixed right-[50px] bottom-[150px] p-2 rounded-full bg-[#ffffff7d] backdrop-blur-sm shadow-lg hover:bg-white transition-all z-10 hover:scale-105"
+            className="fixed right-6 bottom-20 p-3 rounded-full bg-white/90 backdrop-blur-md shadow-xl border border-slate-200 text-indigo-600 hover:scale-110 active:scale-95 transition-all z-20"
             aria-label="Scroll to bottom"
           >
-            <svg className="w-6 h-6 text-gray-600 hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-
-        {/* Scroll to top button */}
-        {!showScrollToBottom && lastScrollHeight > 200 && (
-          <button
-            onClick={scrollToTop}
-            className="fixed right-[50px] bottom-[180px] p-2 rounded-full bg-[#ffffff7d] backdrop-blur-sm shadow-lg hover:bg-white transition-all z-10 hover:scale-105"
-            aria-label="Scroll to top"
-          >
-            <svg className="w-6 h-6 text-gray-600 hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
         )}

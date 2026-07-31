@@ -24,14 +24,29 @@ export interface Post {
   is_liked?: boolean
 }
 
+export type CommentReactionType = 'like' | 'love' | 'laugh' | 'wow' | 'sad' | 'angry'
+
+export interface CommentReaction {
+  id: string
+  comment_id: string
+  user_id: string
+  reaction: CommentReactionType
+  created_at: string
+}
+
 export interface Comment {
   id: string
   post_id: string
   user_id: string
   content: string
+  parent_comment_id: string | null   // null = top-level, uuid = reply
   created_at: string
   // Joined fields
   profiles?: Profile
+  replies?: Comment[]                 // Nested replies (client-side grouped)
+  // Reaction fields (computed via separate queries)
+  reactions?: Record<CommentReactionType, number>  // { like: 3, love: 1, ... }
+  user_reaction?: CommentReactionType | null  // Current user's reaction
 }
 
 export interface Like {
@@ -61,7 +76,7 @@ export interface FollowRequest {
 export interface Notification {
   id: string
   user_id: string
-  type: 'follow' | 'like' | 'comment' | 'follow_request' | 'follow_accept' | 'mention'
+  type: 'follow' | 'like' | 'comment' | 'follow_request' | 'follow_accept' | 'mention' | 'comment_reaction'
   actor_id: string
   post_id: string | null
   comment_id: string | null

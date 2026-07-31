@@ -1,8 +1,40 @@
 @import "tailwindcss";
 
+@layer base {
+  /* ── DM Sans: default body & UI text ─────────────────────── */
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Manrope: all headings ────────────────────────────────── */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ── Manrope for display/brand elements ──────────────────────────
+   Applied via utility class or via font-black / font-extrabold
+   on key elements (usernames, stats, labels, brand names)      */
+.font-heading {
+  font-family: 'Manrope', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* DM Sans explicit utility */
+.font-body {
+  font-family: 'DM Sans', sans-serif;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -10,32 +42,54 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #94a3b8;
 }
 
-/* Smooth scroll */
-html {
-  scroll-behavior: smooth;
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
-/* Line clamp utility */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.glass-nav {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
 }
 
-/* Animations */
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06);
+}
+
+.shadow-card {
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+}
+
+.shadow-card-hover {
+  box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.09), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.shadow-floating {
+  box-shadow: 0 20px 40px -8px rgba(99, 102, 241, 0.15), 0 8px 16px -4px rgba(15, 23, 42, 0.06);
+}
+
+/* Smooth Fade In Animation */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -44,43 +98,110 @@ html {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.25s ease-out forwards;
 }
 
-/* Post card entrance animation */
+/* Heart Pop Animation for Likes */
+@keyframes popHeart {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.animate-pop-heart {
+  animation: popHeart 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Double Tap Heart Overlay Animation */
+@keyframes heartPopOverlay {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+}
+
+.animate-double-tap-heart {
+  animation: heartPopOverlay 0.75s ease-out forwards;
+}
+
+/* Shimmer Loading Animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Post Entrance Animation */
+@keyframes postEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .post-enter {
-  animation: fadeIn 0.3s ease-out;
+  animation: postEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Button focus styles */
-button:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
+/* Call Overlay Glassmorphism */
+.call-overlay-glass {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
-/* Input autofill styles */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 30px white inset !important;
-}
-
-/* Call controls glass container */
 .call-controls-glass {
-  position: relative;
-  z-index: 20;
-  width: 100%;
-  max-width: 700px;
-  margin: 0 auto;
-  margin-top: auto;
-  margin-bottom: 20px;
-  padding: 20px;
-  border-radius: 30px;
-  background-color: rgba(0, 0, 0, 0.27);
-  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.59);
-  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+}
+
+/* Video Call Grid Containers */
+.video-grid-single {
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  height: 100%;
+}
+
+.video-grid-double {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+}
+
+/* Video Stream Element Styling */
+.video-stream-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  background-color: #0f172a;
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.59), 0 20px 50px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* Local video picture-in-picture container */
@@ -90,7 +211,7 @@ input:-webkit-autofill:focus {
   margin: 32px 32px auto auto;
   width: 200px;
   height: 300px;
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   border: 2px solid rgba(255, 255, 255, 0.3);
@@ -138,29 +259,14 @@ input:-webkit-autofill:focus {
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(20px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .animate-slide-up {
-  animation: slideUp 0.3s ease-out;
-}
-
-/* Wave animation for active voice call */
-@keyframes wave {
-  0%, 100% {
-    transform: scaleY(1);
-  }
-  50% {
-    transform: scaleY(2);
-  }
-}
-
-.animate-wave {
-  animation: wave 1.2s ease-in-out infinite;
-  transform-origin: bottom;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

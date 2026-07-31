@@ -38,9 +38,14 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50 relative overflow-x-hidden text-slate-900 font-sans">
+      {/* Background ambient decorative glows */}
+      <div className="fixed top-0 left-1/4 w-[500px] h-[500px] bg-indigo-200/30 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="fixed top-1/3 right-10 w-[450px] h-[450px] bg-purple-200/30 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="fixed bottom-10 left-10 w-[400px] h-[400px] bg-pink-200/25 rounded-full blur-3xl pointer-events-none -z-10" />
+
       {user && <Navbar />}
-      <main className={!isChatRoute ? 'pb-[100px] md:pb-0' : ''}>
+      <main className={!isChatRoute ? 'pb-[100px] md:pb-6' : ''}>
         <Routes>
           <Route path="/" element={user ? <Home /> : <Navigate to="/login" replace />} />
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
