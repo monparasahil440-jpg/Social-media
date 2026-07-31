@@ -77,7 +77,7 @@ export default function ActiveCall({
             <p className="text-white/90 text-lg font-medium tracking-wide">{formatDuration(callDuration)}</p>
           </div>
         </div>
-        <div className="pb-8 pt-8 bg-gradient-to-t from-black/50 to-transparent">
+        <div className="relative z-[999] pb-8 pt-8 bg-gradient-to-t from-black/50 to-transparent">
           <CallControls isVideo={false} micEnabled={micEnabled} cameraEnabled={cameraEnabled} speakerEnabled={speakerEnabled}
             onToggleMic={onToggleMic} onToggleCamera={onToggleCamera} onToggleSpeaker={onToggleSpeaker}
             onSwitchCamera={onSwitchCamera} onEndCall={onEndCall} />
@@ -116,7 +116,7 @@ export default function ActiveCall({
       </div>
       
       {/* Controls */}
-      <div className="absolute bottom-0 left-0 right-0 pb-8 pt-32 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 z-[999] pb-8 pt-32 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
         <CallControls isVideo={true} micEnabled={micEnabled} cameraEnabled={cameraEnabled} speakerEnabled={speakerEnabled}
           onToggleMic={onToggleMic} onToggleCamera={onToggleCamera} onToggleSpeaker={onToggleSpeaker}
           onSwitchCamera={onSwitchCamera} onEndCall={onEndCall} />

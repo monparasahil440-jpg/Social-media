@@ -86,7 +86,27 @@ const MessageBubble = ({ message }: MessageBubbleProps) => {
               ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white rounded-br-sm shadow-md shadow-indigo-500/15'
               : 'bg-white border border-slate-200/80 text-slate-800 rounded-bl-sm shadow-sm'
           }`}>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.image_url && (
+              <img
+                src={message.image_url}
+                alt="Story thumbnail"
+                className="w-full max-h-36 object-cover rounded-2xl mb-2 border border-white/20"
+              />
+            )}
+            {message.content.includes('Replied to') || message.content.includes('Reacted') ? (
+              <div className="space-y-1">
+                <div className={`text-[11px] font-bold font-heading px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${
+                  isOwn ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                }`}>
+                  <span>{message.content.split('\n\n')[0]}</span>
+                </div>
+                {message.content.includes('\n\n') && (
+                  <p className="whitespace-pre-wrap pt-0.5">{message.content.split('\n\n').slice(1).join('\n\n')}</p>
+                )}
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            )}
           </div>
         )}
 

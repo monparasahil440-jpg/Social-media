@@ -63,6 +63,34 @@ export interface Follow {
   created_at: string
 }
 
+export interface Story {
+  id: string
+  user_id: string
+  media_url?: string | null
+  caption?: string | null
+  background_color?: string
+  created_at: string
+  expires_at?: string
+  profiles?: Profile
+  viewed?: boolean
+}
+
+export interface UserStoriesGroup {
+  user_id: string
+  profile?: Profile
+  stories: Story[]
+  hasUnviewed: boolean
+}
+
+export interface StoryViewerItem {
+  id: string
+  story_id: string
+  viewer_id: string
+  created_at: string
+  profile?: Profile
+  user_reaction?: string | null
+}
+
 export interface FollowRequest {
   id: string
   requester_id: string
@@ -128,8 +156,8 @@ export interface Message {
   content: string
   image_url: string | null
   message_type: MessageType
-  call_type: 'audio' | 'video' | null
-  call_duration: number | null
+  call_type?: 'audio' | 'video' | null
+  call_duration?: number | null
   created_at: string
   // Joined fields
   sender?: Profile

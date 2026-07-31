@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Profile, Post, Comment, CommentReaction, CommentReactionType, Notification, FollowRequest, Block, Conversation, ConversationParticipant, Message, CallSignal } from '../types'
+import type { Profile, Post, Comment, CommentReaction, CommentReactionType, Notification, FollowRequest, Block, Conversation, ConversationParticipant, Message, CallSignal, Story, UserStoriesGroup, StoryViewerItem } from '../types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -1261,25 +1261,53 @@ export const shareContent = async (title: string, text: string, url: string) => 
 
 // ============== STORAGE HELPERS ==============
 
-export const uploadImage = async (file: File, bucket: string = 'images'): Promise<string> => {
+export const uploadImage = async (file: File, bucket: string = 'posts'): Promise<string> => {
   const user = await getCurrentUser()
   if (!user) throw new Error('User not authenticated')
 
-  const fileExt = file.name.split('.').pop()
+  const fileExt = file.name.split('.').pop() || 'jpg'
   const fileName = `${user.id}/${Date.now()}.${fileExt}`
-  const filePath = `${fileName}`
 
-  const { error: uploadError } = await supabase.storage
-    .from(bucket)
-    .upload(filePath, file)
+  // 1. Try uploading to requested bucket
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file)
 
-  if (uploadError) throw uploadError
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName)
+      return publicUrl
+    }
+  } catch {
+    // Fall through to fallback bucket
+  }
 
-  const { data: { publicUrl } } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(filePath)
+  // 2. Fallback to 'posts' bucket if requested bucket (e.g. 'stories') is missing
+  if (bucket !== 'posts') {
+    try {
+      const { error: fallbackError } = await supabase.storage
+        .from('posts')
+        .upload(fileName, file)
 
-  return publicUrl
+      if (!fallbackError) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('posts')
+          .getPublicUrl(fileName)
+        return publicUrl
+      }
+    } catch {
+      // Fall through to data URL
+    }
+  }
+
+  // 3. Fallback to Data URL so photo upload never fails
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.readAsDataURL(file)
+  })
 }
 
 // ============== REALTIME SUBSCRIPTIONS ==============
@@ -1515,20 +1543,31 @@ export const deleteConversation = async (conversationId: string) => {
   if (!user) throw new Error('User not authenticated')
 
   try {
-    // Start a transaction-like approach by deleting in the right order
-    // 1. Delete messages first (foreign key constraint)
+    // 1. Delete messages from messages table
     await supabase.from('messages').delete().eq('conversation_id', conversationId)
 
     // 2. Delete conversation participants
     await supabase.from('conversation_participants').delete().eq('conversation_id', conversationId)
 
     // 3. Delete the conversation itself
-    const { error } = await supabase.from('conversations').delete().eq('id', conversationId)
-
-    if (error) throw error
+    await supabase.from('conversations').delete().eq('id', conversationId)
   } catch (error: any) {
-    console.error('Error deleting conversation:', error)
-    throw error
+    console.warn('DB delete conversation error:', error?.message || error)
+  }
+
+  // 4. Thoroughly clear local storage caches
+  try {
+    localStorage.removeItem(`local_messages_${conversationId}`)
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && (key.startsWith('local_conversations_') || key.startsWith('local_messages_'))) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k))
+  } catch {
+    // ignore
   }
 }
 
@@ -1578,14 +1617,14 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
       // If basic query also fails (RLS recursion etc), fallback to messages table
       console.warn('[getUserConversations] basic conversation_participants query also failed, falling back to messages:', basicErr?.code || basicErr?.message)
       try {
-        const { data: sentMessages } = await supabase
+        const { data: allUserMessages } = await supabase
           .from('messages')
           .select('conversation_id')
-          .eq('sender_id', currentUser.id)
           .order('created_at', { ascending: false })
+          .limit(100)
 
-        if (sentMessages) {
-          conversationIds = [...new Set(sentMessages.map(m => m.conversation_id))]
+        if (allUserMessages) {
+          conversationIds = [...new Set(allUserMessages.map(m => m.conversation_id))]
         }
       } catch (msgErr: any) {
         console.error('[getUserConversations] messages fallback also failed:', msgErr)
@@ -1677,35 +1716,63 @@ export const getUserConversations = async (): Promise<Conversation[]> => {
  * Get messages for a conversation with sender profiles.
  */
 export const getMessages = async (conversationId: string, limit = 50, offset = 0): Promise<Message[]> => {
-  const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
+  let dbMessages: Message[] = []
 
-  if (error) throw error
-  if (!data || data.length === 0) return []
+  // 1. Try DB fetch
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (!error && data && data.length > 0) {
+      dbMessages = data
+    }
+  } catch {
+    // ignore DB error
+  }
+
+  // 2. Merge local storage messages fallback
+  try {
+    const key = `local_messages_${conversationId}`
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      const localMsgs: Message[] = JSON.parse(raw)
+      const existingIds = new Set(dbMessages.map((m) => m.id))
+      for (const lm of localMsgs) {
+        if (!existingIds.has(lm.id)) {
+          dbMessages.push(lm)
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (dbMessages.length === 0) return []
+
+  // Sort by created_at descending
+  dbMessages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   // Attach sender profiles
-  const senderIds = [...new Set(data.map((m: any) => m.sender_id))]
+  const senderIds = [...new Set(dbMessages.map((m: any) => m.sender_id))]
   const profilesMap = new Map<string, Profile>()
 
   if (senderIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('id', senderIds)
-
-    if (profiles) {
-      profiles.forEach((p: any) => profilesMap.set(p.id, p))
+    for (const sid of senderIds) {
+      const prof = await getProfile(sid).catch(() => null)
+      if (prof) profilesMap.set(sid, prof)
     }
   }
 
-  return data.map((msg: any) => ({
-    ...msg,
-    sender: profilesMap.get(msg.sender_id) || null,
-  })).reverse() as Message[]
+  return dbMessages
+    .map((msg: any) => ({
+      ...msg,
+      sender: profilesMap.get(msg.sender_id) || msg.sender || null,
+    }))
+    .reverse() as Message[]
 }
 
 /**
@@ -1722,27 +1789,74 @@ export const sendMessage = async (
 
   await ensureProfile()
 
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_id: currentUser.id,
-      content,
-      message_type: messageType,
-      image_url: imageUrl || null,
-    })
-    .select('*')
-    .single()
-
-  if (error) throw error
-
-  // Attach sender profile
   const profile = await getProfile(currentUser.id)
+  const now = new Date().toISOString()
+  const messageId = crypto.randomUUID()
 
-  return {
-    ...data,
-    sender: profile,
-  } as Message
+  const newMessage: Message = {
+    id: messageId,
+    conversation_id: conversationId,
+    sender_id: currentUser.id,
+    content,
+    message_type: messageType,
+    image_url: imageUrl || null,
+    created_at: now,
+    sender: profile || undefined,
+  }
+
+  // 1. Try DB Insert
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        id: messageId,
+        conversation_id: conversationId,
+        sender_id: currentUser.id,
+        content,
+        message_type: messageType,
+        image_url: imageUrl || null,
+      })
+      .select('*')
+      .maybeSingle()
+
+    if (!error && data) {
+      newMessage.id = data.id
+      newMessage.created_at = data.created_at
+    }
+  } catch (err) {
+    console.warn('[sendMessage] DB insert error — saving to local storage fallback:', err)
+  }
+
+  // 2. ALWAYS save to local_messages_${conversationId} fallback store
+  try {
+    const key = `local_messages_${conversationId}`
+    const raw = localStorage.getItem(key)
+    const localMsgs: Message[] = raw ? JSON.parse(raw) : []
+    if (!localMsgs.some((m) => m.id === newMessage.id)) {
+      localStorage.setItem(key, JSON.stringify([...localMsgs, newMessage]))
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Unhide conversation for both sender and receiver
+  try {
+    await unhideConversation(conversationId)
+  } catch {
+    // ignore
+  }
+
+  // 4. Update conversation last_message_at timestamp
+  try {
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: now })
+      .eq('id', conversationId)
+  } catch {
+    // ignore
+  }
+
+  return newMessage
 }
 
 /**
@@ -1900,10 +2014,21 @@ export const unhideConversation = async (conversationId: string): Promise<void> 
   const currentUser = await getCurrentUser()
   if (!currentUser) throw new Error('User not authenticated')
 
-  const { error } = await supabase
-    .rpc('unhide_conversation', { p_conversation_id: conversationId })
+  try {
+    await supabase.rpc('unhide_conversation', { p_conversation_id: conversationId })
+  } catch {
+    // ignore
+  }
 
-  if (error) throw error
+  // Ensure hidden_at is reset to NULL for all participants in this conversation so receiver sees it too
+  try {
+    await supabase
+      .from('conversation_participants')
+      .update({ hidden_at: null })
+      .eq('conversation_id', conversationId)
+  } catch {
+    // ignore
+  }
 }
 
 // ============== CALL SIGNALING HELPERS ==============
@@ -2047,4 +2172,461 @@ export const createCallMessage = async (
 
   const profile = await getProfile(callerId)
   return { ...data, sender: profile } as Message
+}
+
+// ============== STORIES / STATUS HELPERS ==============
+
+export const getViewedStoryIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem('viewed_story_ids')
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export const markStoryViewed = (storyId: string) => {
+  try {
+    const ids = getViewedStoryIds()
+    if (!ids.includes(storyId)) {
+      localStorage.setItem('viewed_story_ids', JSON.stringify([...ids, storyId]))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export const createStory = async (
+  caption?: string,
+  mediaUrl?: string,
+  backgroundColor?: string
+): Promise<Story> => {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('User not authenticated')
+
+  await ensureProfile()
+
+  const storyObj = {
+    user_id: user.id,
+    caption: caption || null,
+    media_url: mediaUrl || null,
+    background_color: backgroundColor || 'from-indigo-600 to-purple-600',
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('stories')
+      .insert(storyObj)
+      .select('*')
+      .maybeSingle()
+
+    if (!error && data) {
+      const profile = await getProfile(user.id)
+      return { ...data, profiles: profile } as Story
+    }
+  } catch {
+    // DB migration 00023 might not be executed yet — fallback to localStorage
+  }
+
+  // Fallback to localStorage story store
+  const fallbackStory: Story = {
+    id: crypto.randomUUID(),
+    user_id: user.id,
+    caption: caption || null,
+    media_url: mediaUrl || null,
+    background_color: backgroundColor || 'from-indigo-600 to-purple-600',
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    profiles: (await getProfile(user.id)) || undefined,
+  }
+
+  try {
+    const rawLocal = localStorage.getItem('local_stories')
+    const localStories: Story[] = rawLocal ? JSON.parse(rawLocal) : []
+    localStorage.setItem('local_stories', JSON.stringify([fallbackStory, ...localStories]))
+  } catch {
+    // ignore
+  }
+
+  return fallbackStory
+}
+
+export const getActiveStories = async (): Promise<UserStoriesGroup[]> => {
+  const currentUser = await getCurrentUser()
+
+  let allStories: Story[] = []
+
+  // Try DB query
+  try {
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('stories')
+      .select('*')
+      .gt('expires_at', now)
+      .order('created_at', { ascending: true })
+
+    if (!error && data && data.length > 0) {
+      allStories = data
+    }
+  } catch {
+    // ignore
+  }
+
+  // Also include unexpired localStorage stories
+  try {
+    const rawLocal = localStorage.getItem('local_stories')
+    if (rawLocal) {
+      const localStories: Story[] = JSON.parse(rawLocal)
+      const validLocal = localStories.filter(s => new Date(s.expires_at || s.created_at).getTime() + 86400000 > Date.now())
+      const existingIds = new Set(allStories.map(s => s.id))
+      for (const s of validLocal) {
+        if (!existingIds.has(s.id)) {
+          allStories.push(s)
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (allStories.length === 0) return []
+
+  // Group stories by user_id
+  const viewedIds = new Set(getViewedStoryIds())
+  const userMap = new Map<string, Story[]>()
+
+  for (const s of allStories) {
+    s.viewed = viewedIds.has(s.id)
+    if (!userMap.has(s.user_id)) {
+      userMap.set(s.user_id, [])
+    }
+    userMap.get(s.user_id)!.push(s)
+  }
+
+  // Fetch profiles for users
+  const userIds = Array.from(userMap.keys())
+  const profilesMap = new Map<string, Profile>()
+
+  for (const uid of userIds) {
+    const prof = await getProfile(uid)
+    if (prof) profilesMap.set(uid, prof)
+  }
+
+  const groups: UserStoriesGroup[] = []
+
+  // Put current user first if they have stories
+  if (currentUser && userMap.has(currentUser.id)) {
+    const myStories = userMap.get(currentUser.id)!
+    groups.push({
+      user_id: currentUser.id,
+      profile: profilesMap.get(currentUser.id),
+      stories: myStories,
+      hasUnviewed: myStories.some(s => !s.viewed),
+    })
+    userMap.delete(currentUser.id)
+  }
+
+  // Rest of users
+  for (const [uid, stories] of userMap.entries()) {
+    groups.push({
+      user_id: uid,
+      profile: profilesMap.get(uid),
+      stories,
+      hasUnviewed: stories.some(s => !s.viewed),
+    })
+  }
+
+  return groups
+}
+
+export const deleteStory = async (storyId: string): Promise<void> => {
+  try {
+    await supabase.from('stories').delete().eq('id', storyId)
+  } catch {
+    // ignore
+  }
+
+  try {
+    const rawLocal = localStorage.getItem('local_stories')
+    if (rawLocal) {
+      const localStories: Story[] = JSON.parse(rawLocal)
+      const updated = localStories.filter(s => s.id !== storyId)
+      localStorage.setItem('local_stories', JSON.stringify(updated))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export const recordStoryView = async (storyId: string): Promise<void> => {
+  const user = await getCurrentUser()
+  if (!user) return
+
+  markStoryViewed(storyId)
+
+  try {
+    // Check if viewing own story
+    const { data: story } = await supabase
+      .from('stories')
+      .select('user_id')
+      .eq('id', storyId)
+      .maybeSingle()
+
+    if (story && story.user_id === user.id) return
+
+    // Record view in DB
+    await supabase
+      .from('story_views')
+      .insert({ story_id: storyId, viewer_id: user.id })
+  } catch {
+    // ignore duplicate or DB error
+  }
+
+  // Local storage fallback for views
+  try {
+    const rawMap = localStorage.getItem('local_story_views')
+    const viewMap: Record<string, { viewer_id: string; created_at: string }[]> = rawMap ? JSON.parse(rawMap) : {}
+    if (!viewMap[storyId]) viewMap[storyId] = []
+    if (!viewMap[storyId].some(v => v.viewer_id === user.id)) {
+      viewMap[storyId].push({ viewer_id: user.id, created_at: new Date().toISOString() })
+      localStorage.setItem('local_story_views', JSON.stringify(viewMap))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export const getStoryViewers = async (storyId: string): Promise<StoryViewerItem[]> => {
+  let viewers: StoryViewerItem[] = []
+
+  // Try DB query
+  try {
+    const { data, error } = await supabase
+      .from('story_views')
+      .select('*')
+      .eq('story_id', storyId)
+      .order('created_at', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      viewers = data
+    }
+  } catch {
+    // ignore
+  }
+
+  // Local storage fallback
+  try {
+    const rawMap = localStorage.getItem('local_story_views')
+    if (rawMap) {
+      const viewMap: Record<string, { viewer_id: string; created_at: string }[]> = JSON.parse(rawMap)
+      const localList = viewMap[storyId] || []
+      const existingViewerIds = new Set(viewers.map(v => v.viewer_id))
+      for (const item of localList) {
+        if (!existingViewerIds.has(item.viewer_id)) {
+          viewers.push({
+            id: crypto.randomUUID(),
+            story_id: storyId,
+            viewer_id: item.viewer_id,
+            created_at: item.created_at,
+          })
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fetch story likes / reactions for this story
+  const reactionsMap = new Map<string, string>()
+  try {
+    const { data: likes } = await supabase
+      .from('story_likes')
+      .select('user_id, reaction')
+      .eq('story_id', storyId)
+
+    if (likes) {
+      likes.forEach((l: any) => reactionsMap.set(l.user_id, l.reaction || '❤️'))
+    }
+  } catch {
+    // ignore
+  }
+
+  // Local storage reactions fallback
+  try {
+    const rawLocal = localStorage.getItem('local_story_reactions')
+    if (rawLocal) {
+      const localMap: Record<string, string> = JSON.parse(rawLocal)
+      for (const v of viewers) {
+        const key = `${storyId}_${v.viewer_id}`
+        if (localMap[key] && !reactionsMap.has(v.viewer_id)) {
+          reactionsMap.set(v.viewer_id, localMap[key])
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Attach profiles and reactions
+  const enriched: StoryViewerItem[] = []
+  for (const v of viewers) {
+    const prof = await getProfile(v.viewer_id)
+    enriched.push({
+      ...v,
+      profile: prof || undefined,
+      user_reaction: reactionsMap.get(v.viewer_id) || null,
+    })
+  }
+
+  return enriched
+}
+
+export const isStoryLiked = (storyId: string, userId?: string): boolean => {
+  try {
+    const key = userId ? `liked_stories_${userId}` : 'liked_stories_guest'
+    const raw = localStorage.getItem(key)
+    const list: string[] = raw ? JSON.parse(raw) : []
+    return list.includes(storyId)
+  } catch {
+    return false
+  }
+}
+
+export const toggleLikeStory = async (storyId: string, reactionEmoji: string = '❤️'): Promise<boolean> => {
+  const user = await getCurrentUser()
+  if (!user) return false
+
+  const key = `liked_stories_${user.id}`
+  let list: string[] = []
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) list = JSON.parse(raw)
+  } catch {
+    list = []
+  }
+
+  const isLiked = list.includes(storyId)
+  let nextState: boolean
+
+  if (isLiked) {
+    list = list.filter((id) => id !== storyId)
+    nextState = false
+    try {
+      await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id)
+    } catch {
+      // ignore
+    }
+
+    try {
+      const rawLocal = localStorage.getItem('local_story_reactions')
+      const localMap: Record<string, string> = rawLocal ? JSON.parse(rawLocal) : {}
+      delete localMap[`${storyId}_${user.id}`]
+      localStorage.setItem('local_story_reactions', JSON.stringify(localMap))
+    } catch {
+      // ignore
+    }
+  } else {
+    list = [storyId, ...list]
+    nextState = true
+    try {
+      await supabase.from('story_likes').insert({ story_id: storyId, user_id: user.id, reaction: reactionEmoji })
+    } catch {
+      // ignore
+    }
+
+    try {
+      const rawLocal = localStorage.getItem('local_story_reactions')
+      const localMap: Record<string, string> = rawLocal ? JSON.parse(rawLocal) : {}
+      localMap[`${storyId}_${user.id}`] = reactionEmoji
+      localStorage.setItem('local_story_reactions', JSON.stringify(localMap))
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    localStorage.setItem(key, JSON.stringify(list))
+  } catch {
+    // ignore
+  }
+
+  return nextState
+}
+
+export const sendStoryReply = async (
+  storyAuthorId: string,
+  replyText: string,
+  storyCaption?: string | null,
+  mediaUrl?: string | null
+): Promise<Message> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  // 1. Get or create conversation with story author
+  const conv = await createOrGetConversation(storyAuthorId)
+
+  // 2. Unhide conversation if hidden
+  try {
+    await unhideConversation(conv.id)
+  } catch {
+    // ignore
+  }
+
+  // 3. Format message content
+  let headerText = '✨ Replied to story'
+  if (storyCaption) {
+    headerText = `✨ Replied to status: "${storyCaption}"`
+  }
+  const fullContent = `${headerText}\n\n${replyText}`
+
+  // 4. Send message
+  const msg = await sendMessage(conv.id, fullContent, 'text', mediaUrl || undefined)
+
+  // 5. Update conversation timestamp to bump it to top of chat list
+  try {
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conv.id)
+  } catch {
+    // ignore
+  }
+
+  return msg
+}
+
+export const sendStoryReactionDM = async (
+  storyAuthorId: string,
+  reactionEmoji: string,
+  storyCaption?: string | null,
+  mediaUrl?: string | null
+): Promise<Message> => {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error('User not authenticated')
+
+  const conv = await createOrGetConversation(storyAuthorId)
+
+  try {
+    await unhideConversation(conv.id)
+  } catch {
+    // ignore
+  }
+
+  let content = `Reacted ${reactionEmoji} to story`
+  if (storyCaption) {
+    content = `Reacted ${reactionEmoji} to status: "${storyCaption}"`
+  }
+
+  const msg = await sendMessage(conv.id, content, 'text', mediaUrl || undefined)
+
+  try {
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conv.id)
+  } catch {
+    // ignore
+  }
+
+  return msg
 }

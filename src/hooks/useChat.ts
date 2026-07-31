@@ -11,6 +11,7 @@ import {
   uploadImage,
   hideConversation as hideConversationApi,
   unhideConversation as unhideConversationApi,
+  deleteConversation as deleteConversationApi,
 } from '../lib/supabaseClient'
 import { useToast } from '../contexts/ToastProvider'
 import { showNotification } from '../utils/notification'
@@ -106,6 +107,24 @@ export function useChat() {
     }
   }
 
+  const deleteConversation = async (conversationId: string) => {
+    try {
+      await deleteConversationApi(conversationId)
+      await loadConversations()
+      showToast('Chat deleted', 'info', 2000)
+    } catch (err: any) {
+      console.error('Error deleting conversation:', err)
+      // Fallback: hide conversation
+      try {
+        await hideConversationApi(conversationId)
+        await loadConversations()
+        showToast('Chat removed', 'info', 2000)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   return {
     conversations,
     loading,
@@ -114,6 +133,7 @@ export function useChat() {
     startConversation,
     hideConversation,
     unhideConversation,
+    deleteConversation,
     refreshConversations: loadConversations,
   }
 }

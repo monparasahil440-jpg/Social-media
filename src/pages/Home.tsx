@@ -7,6 +7,7 @@ import CreatePost from '../components/CreatePost'
 import UserSearch from '../components/UserSearch'
 import LoadingSpinner from '../components/LoadingSpinner'
 import NotificationBell from '../components/NotificationBell'
+import StoriesBar from '../components/Stories/StoriesBar'
 import type { Post } from '../types'
 
 const Home = () => {
@@ -114,6 +115,9 @@ const Home = () => {
       <div className="mb-5 md:hidden">
         <UserSearch />
       </div>
+
+      {/* Stories / Status Tray */}
+      <StoriesBar />
 
       {/* Feed Toggle Pills */}
       <div className="flex items-center gap-2 mb-6 bg-white/80 backdrop-blur-xl rounded-2xl p-1.5 border border-slate-200/80 shadow-sm">

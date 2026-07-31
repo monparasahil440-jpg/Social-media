@@ -271,32 +271,35 @@ const startDurationTimer = useCallback(() => {
   // Reject an incoming call
   const rejectCall = useCallback(async () => {
     const { conversationId, otherUserId, type, sessionId } = callStateRef.current
-    if (conversationId && otherUserId) {
-      try {
-        await sendCallSignal(conversationId, otherUserId, { type: 'reject' }, 'offer')
-      } catch {}
-    }
 
-    // Update session
-    if (sessionId) {
-      try {
-        await updateCallSession(sessionId, { status: 'rejected', ended_at: new Date().toISOString() })
-      } catch {}
-    }
-
-    // Create missed call message in chat (caller is the one who initiated the call)
-    if (conversationId && type && otherUserId) {
-      try {
-        await createCallMessage(conversationId, type, null, false, otherUserId)
-      } catch (err) {
-        console.error('Failed to create call message:', err)
-      }
-    }
-
+    // Immediately stop audio & cleanup local state
     audioService.stopAll()
     cleanupCall()
     setNavbarVisibility(true)
     setCallState(defaultCallState)
+
+    // Non-blocking background network tasks
+    ;(async () => {
+      if (conversationId && otherUserId) {
+        try {
+          await sendCallSignal(conversationId, otherUserId, { type: 'reject' }, 'offer')
+        } catch {}
+      }
+
+      if (sessionId) {
+        try {
+          await updateCallSession(sessionId, { status: 'rejected', ended_at: new Date().toISOString() })
+        } catch {}
+      }
+
+      if (conversationId && type && otherUserId) {
+        try {
+          await createCallMessage(conversationId, type, null, false, otherUserId)
+        } catch (err) {
+          console.error('Failed to create call message:', err)
+        }
+      }
+    })()
   }, [cleanupCall])
 
   // End the current call
@@ -306,43 +309,17 @@ const startDurationTimer = useCallback(() => {
 
     const { conversationId, otherUserId, type, callDuration, status, sessionId } = callStateRef.current
     const wasConnected = status === 'connected'
-
-    // Send end signal
-    if (conversationId && otherUserId) {
-      try {
-        await sendCallEndSignal(conversationId, otherUserId)
-      } catch {}
-    }
-
-    // Update session
-    if (sessionId) {
-      try {
-        await updateCallSession(sessionId, {
-          status: wasConnected ? 'answered' : 'missed',
-          ended_at: new Date().toISOString(),
-          duration: callDuration,
-        })
-      } catch {}
-    }
-
-    audioService.stopAll()
-    audioService.playEndSound()
-    cleanupCall()
-
-    // Create call message in chat (caller is always the one who initiated)
-    if (conversationId) {
-      try {
-        await createCallMessage(conversationId, type, wasConnected ? callDuration : null, wasConnected, user?.id || '')
-      } catch (err) {
-        console.error('Failed to create call message:', err)
-      }
-    }
-
-    // Build summary data
     const otherProfile = callStateRef.current.otherUserProfile
     const currentConversationId = callStateRef.current.conversationId
     const currentOtherUserId = callStateRef.current.otherUserId
 
+    // 1. Immediately stop audio, cleanup WebRTC streams & restore navbar
+    audioService.stopAll()
+    audioService.playEndSound()
+    cleanupCall()
+    setNavbarVisibility(true)
+
+    // 2. Immediately update state so UI closes and transitions to summary without delay
     setCallState(prev => ({
       ...prev,
       status: 'summary',
@@ -357,7 +334,6 @@ const startDurationTimer = useCallback(() => {
       },
     }))
 
-    // Auto-show rating dialog for connected calls
     if (wasConnected) {
       setTimeout(() => setShowRating(true), 500)
     }
@@ -365,7 +341,34 @@ const startDurationTimer = useCallback(() => {
     setTimeout(() => {
       isEndingRef.current = false
     }, 1000)
-  }, [cleanupCall, currentUserProfile])
+
+    // 3. Non-blocking background tasks (signals, DB updates, call message)
+    ;(async () => {
+      if (conversationId && otherUserId) {
+        try {
+          await sendCallEndSignal(conversationId, otherUserId)
+        } catch {}
+      }
+
+      if (sessionId) {
+        try {
+          await updateCallSession(sessionId, {
+            status: wasConnected ? 'answered' : 'missed',
+            ended_at: new Date().toISOString(),
+            duration: callDuration,
+          })
+        } catch {}
+      }
+
+      if (conversationId) {
+        try {
+          await createCallMessage(conversationId, type, wasConnected ? callDuration : null, wasConnected, user?.id || '')
+        } catch (err) {
+          console.error('Failed to create call message:', err)
+        }
+      }
+    })()
+  }, [cleanupCall, currentUserProfile, user?.id])
 
     const dismissSummary = useCallback(() => {
       setCallState(defaultCallState)

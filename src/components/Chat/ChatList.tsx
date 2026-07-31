@@ -9,16 +9,16 @@ import type { Conversation } from '../../types'
 interface ConfirmDialogState {
   show: boolean
   conv: Conversation | null
-  action: 'hide' | 'unhide'
+  action: 'delete'
 }
 
 const ChatList = () => {
   const { user, profile } = useAuth()
-  const { conversations, loading, totalUnread, startConversation, hideConversation, unhideConversation } = useChat()
+  const { conversations, loading, startConversation, deleteConversation } = useChat()
   const navigate = useNavigate()
   const location = useLocation()
   const [showNewChat, setShowNewChat] = useState(false)
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ show: false, conv: null, action: 'hide' })
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ show: false, conv: null, action: 'delete' })
 
   const activeConversationId = location.pathname.split('/chat/')[1]
 
@@ -148,7 +148,8 @@ const ChatList = () => {
                       )}
                     </div>
                   </div>
-                  {/* Hide/Unhide button */}
+
+                  {/* Remove Chat Button */}
                   <div className="relative">
                     <button
                       onClick={(e) => {
@@ -156,18 +157,15 @@ const ChatList = () => {
                         setConfirmDialog({
                           show: true,
                           conv,
-                          action: conv.hidden_at ? 'unhide' : 'hide',
+                          action: 'delete',
                         })
                       }}
-                      className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition-colors"
-                      aria-label={conv.hidden_at ? 'Unhide conversation' : 'Hide conversation'}
+                      className="p-1.5 rounded-full hover:bg-rose-100/80 text-slate-400 hover:text-rose-600 transition-colors"
+                      aria-label="Delete chat"
+                      title="Delete chat"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {conv.hidden_at ? (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        )}
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
@@ -191,63 +189,45 @@ const ChatList = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-sm w-full mx-4 overflow-hidden transform transition-all">
             <div className="p-6 text-center">
-              <div className={`w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center ${
-                confirmDialog.action === 'hide'
-                  ? 'bg-rose-100 text-rose-500'
-                  : 'bg-emerald-100 text-emerald-500'
-              }`}>
-                {confirmDialog.action === 'hide' ? (
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                )}
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-rose-100 text-rose-500">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
               </div>
 
               <h3 className="text-lg font-bold text-slate-900 mb-1.5 font-heading">
-                {confirmDialog.action === 'hide' ? 'Hide conversation?' : 'Unhide conversation?'}
+                Delete conversation?
               </h3>
 
               <p className="text-xs text-slate-500 mb-6 leading-relaxed font-body">
-                {confirmDialog.action === 'hide'
-                  ? `This will hide the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} from your main inbox.`
-                  : `This will restore the conversation with ${confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'} back to your main inbox.`
-                }
+                Are you sure you want to remove the conversation with <strong className="text-slate-800 font-semibold">{confirmDialog.conv.other_participant?.full_name || confirmDialog.conv.other_participant?.username || 'this user'}</strong>? This will remove the chat from your inbox.
               </p>
 
               <div className="flex gap-2.5">
                 <button
-                  onClick={() => setConfirmDialog({ show: false, conv: null, action: 'hide' })}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-2xl hover:bg-slate-200 transition-colors"
+                  onClick={() => setConfirmDialog({ show: false, conv: null, action: 'delete' })}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-2xl hover:bg-slate-200 transition-colors font-heading"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={async () => {
                     const c = confirmDialog.conv
-                    setConfirmDialog({ show: false, conv: null, action: 'hide' })
+                    setConfirmDialog({ show: false, conv: null, action: 'delete' })
                     if (c) {
                       try {
-                        if (confirmDialog.action === 'hide') {
-                          await hideConversation(c.id)
-                        } else {
-                          await unhideConversation(c.id)
+                        await deleteConversation(c.id)
+                        if (activeConversationId === c.id) {
+                          navigate('/chat')
                         }
                       } catch {
-                        // Error handled in useChat
+                        // handled in hook
                       }
                     }
                   }}
-                  className={`flex-1 py-2.5 text-white text-xs font-bold rounded-2xl transition-all ${
-                    confirmDialog.action === 'hide'
-                      ? 'bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20'
-                      : 'bg-emerald-500 hover:bg-emerald-600 shadow-md shadow-emerald-500/20'
-                  }`}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-2xl shadow-md shadow-rose-500/20 transition-all font-heading"
                 >
-                  {confirmDialog.action === 'hide' ? 'Hide' : 'Unhide'}
+                  Delete Chat
                 </button>
               </div>
             </div>
@@ -259,4 +239,3 @@ const ChatList = () => {
 }
 
 export default ChatList
-
